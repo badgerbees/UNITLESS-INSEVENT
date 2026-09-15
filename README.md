@@ -1,20 +1,9 @@
-# MELA (Mother & Expectant Life Assistant)
+# UNITLESS
 
-A responsive React + Vite web app designed to assist expectant mothers and their companions.
+This is a code bundle for UNITLESS. The original project is available at https://www.figma.com/design/ZYkG6Ue1NHojOULQfJavP0/UNITLESS.
 
 ## Running the code
 
-Install the dependencies:
-```bash
-pnpm install
-```
+Run `pnpm i` to install the dependencies.
 
-Start the development server:
-```bash
-pnpm dev
-```
-
-Build for production:
-```bash
-pnpm build
-```
+Run `pnpm run dev` to start the development server.

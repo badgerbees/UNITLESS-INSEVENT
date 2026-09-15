@@ -1,0 +1,58 @@
+export type VitalLog = {
+  id: string;
+  date: string;
+  minggu: number;
+  td: string;
+  bb: string;
+  fundus: string;
+  gerakan: string;
+  hb: string;
+  protein: "Negatif" | "+" | "++" | "+++";
+  catatan: string;
+};
+
+export type EmergencyAlert = {
+  sentAt: Date;
+  trigger: "manual" | "511" | "symptom";
+  location: string;
+  lat: number;
+  lng: number;
+  contractions?: string;
+  message: string;
+  husbandAck: boolean;
+  husbandEta: number | null;
+};
+
+export type Theme = {
+  sidebarBg: string;
+  primary: string;
+  active: string;
+  grad: string;
+  bg: string;
+  soft: string;
+  card: string;
+  dark: string;
+  muted: string;
+  shadow: string;
+  border: string;
+};
+
+export type Mode = "mother" | "companion";
+export type Screen = "dashboard" | "health" | "calendar" | "reports" | "resources" | "emergency" | "postpartum";
+export type Risk = "green" | "yellow" | "red";
+
+export type UserProfile = {
+  motherName: string;
+  fatherName: string;
+  email: string;
+  phone: string;
+  hphtDate: string;
+  hospital: string;
+  doctor: string;
+  bloodType: string;
+  syncCode: string;
+  notifVitamin: boolean;
+  notifAnc: boolean;
+  notifEmergencySound: boolean;
+  notifWeeklyReport: boolean;
+};

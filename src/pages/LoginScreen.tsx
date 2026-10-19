@@ -3,6 +3,7 @@ import { Mail, Lock } from "lucide-react";
 import { THEMES } from "../constants/theme";
 import { Mode } from "../types";
 import { Card } from "../components/Card";
+import { APP_NAME } from "../constants/brand";
 
 export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
   const [loginMode, setLoginMode] = useState<Mode>("mother");
@@ -25,7 +26,7 @@ export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
           <div className="text-center mb-8">
             <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-white text-3xl mb-4 shadow-lg transition-colors duration-500"
               style={{ background: t.grad }}>
-              M
+              {APP_NAME[0]}
             </div>
             <p className="text-2xl font-extrabold" style={{ color: t.dark }}>
               {authView === "login" 
@@ -39,7 +40,7 @@ export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
               {authView === "login" 
                 ? (loginMode === "mother" ? "Senang melihat Anda kembali. Mari pantau si kecil hari ini." : "Siap mendampingi Bunda dan si kecil hari ini?")
                 : authView === "register" 
-                ? (loginMode === "mother" ? "Mari mulai perjalanan indah keibuan Anda bersama Mela." : "Mari bersiap jadi pendamping siaga yang hebat untuk Bunda.")
+                ? (loginMode === "mother" ? `Mari mulai perjalanan indah keibuan Anda bersama ${APP_NAME}.` : "Mari bersiap jadi pendamping siaga yang hebat untuk Bunda.")
                 : "Masukkan email untuk tautan pemulihan sandi akun Anda."
               }
             </p>

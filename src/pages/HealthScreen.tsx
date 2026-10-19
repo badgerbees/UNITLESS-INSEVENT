@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Theme, VitalLog, EmergencyAlert, Risk, Mode } from "../types";
+import { Theme, VitalLog, EmergencyAlert, Risk, Mode, Vitamin, CustomSymptom } from "../types";
 import { Card } from "../components/Card";
 import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
@@ -10,88 +10,149 @@ import {
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
   PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
-  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
+  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, Pencil, Trash2
 } from "lucide-react";
 
 
-export function VitaminTracker({ t, done, setDone, className = "" }: { t: Theme; done: Record<string, boolean>; setDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>; className?: string }) {
-  const VITAMINS = [
-    { id: "folat",   label: "Asam Folat", dose: "400 mcg", color: "#e899a6" },
-    { id: "besi",    label: "Zat Besi",   dose: "60 mg",   color: "#ef4444" },
-    { id: "kalsium", label: "Kalsium",    dose: "500 mg",  color: "#a0a0a0" },
-    { id: "vitD",    label: "Vitamin D",  dose: "400 IU",  color: "#f59e0b" },
-  ];
-  const pct = Math.round((Object.values(done).filter(Boolean).length / VITAMINS.length) * 100);
-  const allDone = pct === 100;
+export const DEFAULT_VITAMINS: Vitamin[] = [
+  { id: "folat",   label: "Asam Folat", dose: "400 mcg", color: "#e899a6" },
+  { id: "besi",    label: "Zat Besi",   dose: "60 mg",   color: "#ef4444" },
+  { id: "kalsium", label: "Kalsium",    dose: "500 mg",  color: "#a0a0a0" },
+  { id: "vitD",    label: "Vitamin D",  dose: "400 IU",  color: "#f59e0b" },
+];
+const VITAMIN_COLORS = ["#e899a6", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", "#a0a0a0"];
+
+export function VitaminTracker({ t, done, setDone, vitamins, setVitamins, className = "" }: {
+  t: Theme; done: Record<string, boolean>; setDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>; className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft]     = useState<Vitamin[]>([]);
+
+  const doneCount = vitamins.filter(v => done[v.id]).length;
+  const pct = vitamins.length ? Math.round((doneCount / vitamins.length) * 100) : 0;
+  const allDone = vitamins.length > 0 && pct === 100;
+
+  function startEdit() { setDraft(vitamins.map(v => ({ ...v }))); setEditing(true); }
+  function updateDraft(id: string, patch: Partial<Vitamin>) { setDraft(d => d.map(v => v.id === id ? { ...v, ...patch } : v)); }
+  function cycleColor(v: Vitamin) {
+    const next = VITAMIN_COLORS[(VITAMIN_COLORS.indexOf(v.color) + 1) % VITAMIN_COLORS.length];
+    updateDraft(v.id, { color: next });
+  }
+  function addDraft() {
+    setDraft(d => [...d, { id: `vit-${Date.now()}`, label: "", dose: "", color: VITAMIN_COLORS[d.length % VITAMIN_COLORS.length] }]);
+  }
+  function saveEdit() {
+    const cleaned = draft.map(v => ({ ...v, label: v.label.trim(), dose: v.dose.trim() })).filter(v => v.label);
+    const keep = new Set(cleaned.map(v => v.id));
+    setVitamins(cleaned);
+    setDone(p => Object.fromEntries(Object.entries(p).filter(([id]) => keep.has(id))));
+    setEditing(false);
+  }
+
+  const inputStyle = { background: "#fff", border: `1.5px solid ${t.border}`, color: t.dark };
 
   return (
     <Card t={t} className={`p-5 flex flex-col ${className}`}>
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-start justify-between mb-1">
         <SectionTitle>Vitamin Hari Ini</SectionTitle>
-        <span className="text-xs font-bold" style={{ color: allDone ? "#22c55e" : t.active }}>{pct}%</span>
+        <div className="flex items-center gap-3">
+          {!editing && <span className="text-xs font-bold" style={{ color: allDone ? "#22c55e" : t.active }}>{pct}%</span>}
+          {editing ? (
+            <button onClick={saveEdit} className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full text-white" style={{ background: t.active }}>
+              <Check size={13} /> Simpan
+            </button>
+          ) : (
+            <button onClick={startEdit} className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.active }}>
+              <Pencil size={12} /> Edit
+            </button>
+          )}
+        </div>
       </div>
-      <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: t.soft }}>
-        <div className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, background: allDone ? "#22c55e" : t.active }} />
-      </div>
-      <div className="grid grid-cols-2 gap-2 flex-1">
-        {VITAMINS.map(v => (
-          <button key={v.id} onClick={() => setDone(p => ({ ...p, [v.id]: !p[v.id] }))}
-            className="flex items-center gap-3 rounded-xl px-3 transition-all text-left w-full"
-            style={{ background: done[v.id] ? "#f0fdf4" : t.soft, border: `1.5px solid ${done[v.id] ? "#22c55e40" : "transparent"}` }}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-              style={{ background: done[v.id] ? "#22c55e" : v.color }}>
-              {done[v.id]
-                ? <Check size={16} className="text-white" />
-                : <span className="text-xs font-bold text-white">{v.label[0]}</span>
-              }
+
+      {editing ? (
+        <div className="flex flex-col gap-2 flex-1">
+          {draft.map(v => (
+            <div key={v.id} className="flex items-center gap-2 rounded-xl p-2" style={{ background: t.soft }}>
+              <button onClick={() => cycleColor(v)} title="Klik untuk ganti warna"
+                className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                style={{ background: v.color }}>
+                {(v.label.trim() || "?")[0].toUpperCase()}
+              </button>
+              <input value={v.label} onChange={e => updateDraft(v.id, { label: e.target.value })} placeholder="Nama vitamin" maxLength={30}
+                className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none" style={inputStyle} />
+              <input value={v.dose} onChange={e => updateDraft(v.id, { dose: e.target.value })} placeholder="Dosis" maxLength={15}
+                className="w-24 rounded-lg px-3 py-1.5 text-xs outline-none" style={inputStyle} />
+              <button onClick={() => setDraft(d => d.filter(x => x.id !== v.id))} title="Hapus"
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 hover:bg-white" style={{ color: t.muted }}>
+                <Trash2 size={14} />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold truncate" style={{ color: done[v.id] ? "#166534" : t.dark }}>{v.label}</p>
-              <p className="text-[10px]" style={{ color: t.muted }}>{v.dose}</p>
-            </div>
-            {done[v.id] && <CheckCheck size={13} className="text-green-500 flex-shrink-0" />}
+          ))}
+          <button onClick={addDraft} className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold"
+            style={{ border: `1.5px dashed ${t.primary}`, color: t.active }}>
+            <Plus size={14} /> Tambah vitamin
           </button>
-        ))}
-      </div>
-      {allDone && (
-        <div className="mt-3 rounded-xl py-2.5 text-center" style={{ background: "#f0fdf4" }}>
-          <p className="text-sm text-green-600 font-bold">Semua vitamin sudah diminum hari ini</p>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4 mt-4" style={{ borderTop: `1px solid ${t.border}` }}>
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="px-4 py-2 rounded-full text-xs font-bold transition-all disabled:opacity-50"
-                    style={{ background: t.soft, color: t.active }}
-                  >
-                    &larr; Sebelumnya
-                  </button>
-                  <span className="text-xs font-semibold" style={{ color: t.muted }}>
-                    Halaman {page} dari {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="px-4 py-2 rounded-full text-xs font-bold transition-all disabled:opacity-50"
-                    style={{ background: t.soft, color: t.active }}
-                  >
-                    Selanjutnya &rarr;
-                  </button>
-                </div>
-              )}
+          <div className="flex items-center justify-between mt-1">
+            <button onClick={() => setDraft(DEFAULT_VITAMINS.map(v => ({ ...v })))} className="text-[11px] font-semibold underline" style={{ color: t.muted }}>
+              Kembalikan ke default
+            </button>
+            <button onClick={() => setEditing(false)} className="text-[11px] font-semibold" style={{ color: t.muted }}>Batal</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: t.soft }}>
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: allDone ? "#22c55e" : t.active }} />
+          </div>
+          {vitamins.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+              <p className="text-xs" style={{ color: t.muted }}>Belum ada vitamin.</p>
+              <button onClick={startEdit} className="mt-2 text-xs font-bold" style={{ color: t.active }}>+ Tambah vitamin</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 flex-1">
+              {vitamins.map(v => (
+                <button key={v.id} onClick={() => setDone(p => ({ ...p, [v.id]: !p[v.id] }))}
+                  className="flex items-center gap-3 rounded-xl px-3 py-3 transition-all text-left w-full"
+                  style={{ background: done[v.id] ? "#f0fdf4" : t.soft, border: `1.5px solid ${done[v.id] ? "#22c55e40" : "transparent"}` }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                    style={{ background: done[v.id] ? "#22c55e" : v.color }}>
+                    {done[v.id]
+                      ? <Check size={16} className="text-white" />
+                      : <span className="text-xs font-bold text-white">{v.label[0]?.toUpperCase()}</span>
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate" style={{ color: done[v.id] ? "#166534" : t.dark }}>{v.label}</p>
+                    {v.dose && <p className="text-[10px]" style={{ color: t.muted }}>{v.dose}</p>}
+                  </div>
+                  {done[v.id] && <CheckCheck size={13} className="text-green-500 flex-shrink-0" />}
+                </button>
+              ))}
             </div>
           )}
-        </Card>
+          {allDone && (
+            <div className="mt-3 rounded-xl py-2.5 text-center" style={{ background: "#f0fdf4" }}>
+              <p className="text-sm text-green-600 font-bold">Semua vitamin sudah diminum hari ini</p>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
-export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, symptoms, setSymptoms }: {
+export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, vitamins, setVitamins, symptoms, setSymptoms, customSymptoms, setCustomSymptoms }: {
   t: Theme; onEmergency: () => void;
   vitalLogs: VitalLog[]; onAddVital: (v: VitalLog) => void;
   vitDone: Record<string, boolean>; setVitDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>;
   symptoms: Record<string, boolean>; setSymptoms: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  customSymptoms: CustomSymptom[]; setCustomSymptoms: React.Dispatch<React.SetStateAction<CustomSymptom[]>>;
 }) {
+  const [newSym, setNewSym] = useState("");
   const [kick, setKick]               = useState(0);
   const [kickActive, setKickActive]   = useState(false);
   const [kickSecs, setKickSecs]       = useState(0);
@@ -122,6 +183,23 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
   const risk: Risk = activeSyms.some(s => s.risk === "red") ? "red" : activeSyms.some(s => s.risk === "yellow") ? "yellow" : "green";
   const riskColor  = { green: "#22c55e", yellow: "#f59e0b", red: "#ef4444" };
   const riskLabel  = { green: "Status Normal", yellow: "Perlu Perhatian", red: "Tanda Bahaya" };
+
+  // Gejala tambahan dari user hanya dicatat — tidak memengaruhi status risiko
+  function addCustomSymptom() {
+    const label = newSym.trim();
+    if (!label) return;
+    const exists = [...symList, ...customSymptoms].some(s => s.label.toLowerCase() === label.toLowerCase());
+    if (!exists) {
+      const id = `custom-${Date.now()}`;
+      setCustomSymptoms(p => [...p, { id, label }]);
+      setSymptoms(p => ({ ...p, [id]: true }));
+    }
+    setNewSym("");
+  }
+  function removeCustomSymptom(id: string) {
+    setCustomSymptoms(p => p.filter(s => s.id !== id));
+    setSymptoms(p => { const { [id]: _, ...rest } = p; return rest; });
+  }
 
   useEffect(() => {
     if (!contrActive) return;
@@ -479,8 +557,44 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
               );
             })}
           </div>
+
+          <div className="mt-4 pt-4" style={{ borderTop: `1px dashed ${t.border}` }}>
+            <p className="text-[11px] font-bold mb-2" style={{ color: t.muted }}>Gejala lainnya</p>
+            {customSymptoms.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {customSymptoms.map(({ id, label }) => (
+                  <div key={id} className="flex items-center rounded-full text-xs font-semibold transition-all"
+                    style={{
+                      background: symptoms[id] ? t.active + "15" : t.soft,
+                      border: `1.5px solid ${symptoms[id] ? t.active : "transparent"}`,
+                      color: symptoms[id] ? t.active : t.muted,
+                    }}>
+                    <button onClick={() => setSymptoms(p => ({ ...p, [id]: !p[id] }))} className="pl-3 pr-1.5 py-1.5">
+                      {symptoms[id] ? "✓ " : ""}{label}
+                    </button>
+                    <button onClick={() => removeCustomSymptom(id)} title="Hapus gejala" className="pr-2.5 pl-0.5 py-1.5 opacity-60 hover:opacity-100">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={e => { e.preventDefault(); addCustomSymptom(); }} className="flex gap-2">
+              <input value={newSym} onChange={e => setNewSym(e.target.value)} placeholder="Contoh: kram kaki, susah tidur" maxLength={40}
+                className="flex-1 min-w-0 rounded-xl px-3 py-2 text-xs outline-none"
+                style={{ background: "#fff", border: `1.5px solid ${t.border}`, color: t.dark }} />
+              <button type="submit" disabled={!newSym.trim()}
+                className="flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white transition-all disabled:opacity-40"
+                style={{ background: t.active }}>
+                <Plus size={13} /> Tambah
+              </button>
+            </form>
+            <p className="text-[10px] mt-2 leading-relaxed" style={{ color: t.muted }}>
+              Gejala tambahan hanya dicatat dan tidak dinilai otomatis. Konsultasikan ke bidan/dokter bila mengkhawatirkan.
+            </p>
+          </div>
         </Card>
-        <VitaminTracker t={t} done={vitDone} setDone={setVitDone} className="h-full" />
+        <VitaminTracker t={t} done={vitDone} setDone={setVitDone} vitamins={vitamins} setVitamins={setVitamins} className="h-full" />
       </div>
     </div>
   );

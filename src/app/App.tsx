@@ -7,18 +7,19 @@ import {
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
 import { Routes, Route, useNavigate, useLocation } from "react-router";
-import { VitalLog, EmergencyAlert, Theme, Mode, Screen, Risk, UserProfile } from "../types";
+import { VitalLog, EmergencyAlert, Theme, Mode, Screen, Risk, UserProfile, Vitamin, CustomSymptom } from "../types";
 import { THEMES } from "../constants/theme";
 import { Card } from "../components/Card";
 import { LoginScreen } from "../pages/LoginScreen";
 import { MotherDashboard, CompanionDashboard } from "../pages/Dashboard";
-import { HealthScreen } from "../pages/HealthScreen";
+import { HealthScreen, DEFAULT_VITAMINS } from "../pages/HealthScreen";
 import { CalendarScreen } from "../pages/CalendarScreen";
 import { ReportsScreen } from "../pages/ReportsScreen";
 import { ResourcesScreen } from "../pages/ResourcesScreen";
 import { EmergencyScreen } from "../pages/EmergencyScreen";
 import { PostpartumScreen } from "../pages/PostpartumScreen";
 import { addDays, getFruit, fmtDate } from "../utils/helpers";
+import { APP_NAME } from "../constants/brand";
 const SEED_VITALS: VitalLog[] = [
   { id:"v1", date:"5 Nov 2024",  minggu:18, td:"116/74", bb:"62.0", fundus:"18", gerakan:"6-8",  hb:"12.1", protein:"Negatif", catatan:"" },
   { id:"v2", date:"2 Des 2024",  minggu:22, td:"118/76", bb:"64.5", fundus:"22", gerakan:"8-10", hb:"11.9", protein:"Negatif", catatan:"Sedikit pusing pagi" },
@@ -430,6 +431,13 @@ function SettingsModal({
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 
+function loadJSON<T>(key: string, fallback: T): T {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
+}
+function saveJSON(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage tidak tersedia */ }
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("isAuthenticated") === "true");
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("appMode") as Mode) || "mother");
@@ -455,6 +463,11 @@ export default function App() {
   const [vitalLogs, setVitalLogs] = useState<VitalLog[]>([]);
   const [vitDone, setVitDone]   = useState<Record<string, boolean>>({});
   const [symptoms, setSymptoms] = useState<Record<string, boolean>>({});
+  // Daftar vitamin & gejala tambahan yang dikustomisasi user — disimpan agar tidak hilang saat refresh
+  const [vitamins, setVitamins] = useState<Vitamin[]>(() => loadJSON("vitamins", DEFAULT_VITAMINS));
+  const [customSymptoms, setCustomSymptoms] = useState<CustomSymptom[]>(() => loadJSON("customSymptoms", []));
+  useEffect(() => { saveJSON("vitamins", vitamins); }, [vitamins]);
+  useEffect(() => { saveJSON("customSymptoms", customSymptoms); }, [customSymptoms]);
 
   function handleAck() {
     setAlert(prev => prev ? { ...prev, husbandAck: true } : null);
@@ -531,12 +544,9 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-base"
               style={{ background: t.grad }}>
-              M
+              {APP_NAME[0]}
             </div>
-            <div>
-              <p className="text-base font-extrabold leading-none" style={{ color: t.dark }}>Mela</p>
-              <p className="text-[10px] font-medium mt-0.5" style={{ color: t.muted }}>Pregnancy Companion</p>
-            </div>
+            <p className="text-base font-extrabold leading-none" style={{ color: t.dark }}>{APP_NAME}</p>
           </div>
         </div>
 
@@ -611,33 +621,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Profile */}
-        <div className="p-4 flex-shrink-0" style={{ borderTop: `1px solid ${t.border}` }}>
-          <div 
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-2 -mx-2 rounded-xl transition-all"
-            title="Buka Pengaturan"
-          >
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
-              style={{ background: t.grad }}>
-              {mode === "mother" ? (userProfile.motherName[0] || "S") : (userProfile.fatherName[0] || "A")}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-bold truncate" style={{ color: t.dark }}>
-                {mode === "mother" ? userProfile.motherName : userProfile.fatherName}
-              </p>
-              <p className="text-[10px] truncate" style={{ color: t.muted }}>
-                {mode === "mother" ? `Minggu ke-${weeksPreg}` : "Mode Pendamping"}
-              </p>
-            </div>
-            <Settings size={14} color={t.muted} className="hover:rotate-45 transition-transform" />
-          </div>
-          <button onClick={() => setIsAuthenticated(false)}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all hover:bg-gray-100"
-            style={{ color: t.muted, border: `1px solid ${t.border}` }}>
-            <LogOut size={14} /> Keluar
-          </button>
-        </div>
       </aside>
 
       {/* Main */}
@@ -647,8 +630,13 @@ export default function App() {
           style={{ background: t.bg + "e8", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}` }}
         >
           <div>
-            <h1 className="text-xl font-extrabold leading-none" style={{ color: t.dark }}>{screenLabel[screen]}</h1>
-            <p className="text-xs mt-0.5" style={{ color: t.muted }}>{fmtDate(today)} · Kehamilan minggu {weeksPreg}+{daysExtra}</p>
+            {/* Di Beranda, bar atas menampilkan nama web; minggu kehamilan sudah tampil di kartu hero */}
+            <h1 className="text-xl font-extrabold leading-none" style={{ color: t.dark }}>
+              {screen === "dashboard" ? APP_NAME : screenLabel[screen as Screen]}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: t.muted }}>
+              {fmtDate(today)}{screen !== "dashboard" && ` · Kehamilan minggu ${weeksPreg}+${daysExtra}`}
+            </p>
           </div>
           <div className="flex items-center gap-3 relative">
             
@@ -826,9 +814,9 @@ export default function App() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6" style={{ scrollbarWidth: "none" }}>
           <Routes>
-            <Route path="/" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
-            <Route path="/dashboard" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
-            <Route path="/health" element={<HealthScreen t={t} onEmergency={() => navigate("/emergency")} vitalLogs={vitalLogs} onAddVital={v => setVitalLogs(p => [...p, v])} vitDone={vitDone} setVitDone={setVitDone} symptoms={symptoms} setSymptoms={setSymptoms} />} />
+            <Route path="/" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} vitamins={vitamins} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
+            <Route path="/dashboard" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} vitamins={vitamins} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
+            <Route path="/health" element={<HealthScreen t={t} onEmergency={() => navigate("/emergency")} vitalLogs={vitalLogs} onAddVital={v => setVitalLogs(p => [...p, v])} vitDone={vitDone} setVitDone={setVitDone} vitamins={vitamins} setVitamins={setVitamins} symptoms={symptoms} setSymptoms={setSymptoms} customSymptoms={customSymptoms} setCustomSymptoms={setCustomSymptoms} />} />
             <Route path="/calendar" element={<CalendarScreen t={t} dueDate={dueDate} weeksPreg={weeksPreg} daysUntilDue={daysUntilDue} trimester={trimester} />} />
             <Route path="/reports" element={<ReportsScreen t={t} vitalLogs={vitalLogs} onAddVital={v => setVitalLogs(p => [...p, v])} weeksPreg={weeksPreg} dueDate={dueDate} />} />
             <Route path="/resources" element={<ResourcesScreen t={t} />} />
@@ -882,7 +870,7 @@ function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose
       <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5" style={{ background: t.bg, border: `1px solid ${t.border}`, scrollbarWidth: "none" }}>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.active }}>Bantuan Mela</p>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.active }}>Bantuan {APP_NAME}</p>
             <p className="text-lg font-extrabold" style={{ color: t.dark }}>Customer Service</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-black/5 transition-colors" style={{ color: t.muted }} aria-label="Tutup Customer Service">
@@ -896,7 +884,7 @@ function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose
         </div>
         <div>
           <p className="text-xl font-extrabold text-white">Ada yang bisa kami bantu?</p>
-          <p className="text-sm text-white/80 mt-1">Tim Mela siap membantu kebutuhan Anda.</p>
+          <p className="text-sm text-white/80 mt-1">Tim {APP_NAME} siap membantu kebutuhan Anda.</p>
         </div>
         </div>
 
@@ -955,7 +943,7 @@ function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose
               </a>
               <a href="https://wa.me/6281255550199" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl p-3" style={{ background: t.soft }}>
                 <MessageCircle size={17} color="#16a34a" />
-                <div><p className="text-xs font-bold" style={{ color: t.dark }}>WhatsApp Mela</p><p className="text-[10px]" style={{ color: t.muted }}>Balasan biasanya kurang dari 10 menit</p></div>
+                <div><p className="text-xs font-bold" style={{ color: t.dark }}>WhatsApp {APP_NAME}</p><p className="text-[10px]" style={{ color: t.muted }}>Balasan biasanya kurang dari 10 menit</p></div>
               </a>
             </div>
           </Card>

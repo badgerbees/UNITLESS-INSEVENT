@@ -56,3 +56,6 @@ export type UserProfile = {
   notifEmergencySound: boolean;
   notifWeeklyReport: boolean;
 };
+
+export type Vitamin = { id: string; label: string; dose: string; color: string };
+export type CustomSymptom = { id: string; label: string };

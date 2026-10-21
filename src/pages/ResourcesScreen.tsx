@@ -12,6 +12,7 @@ import {
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
+import { APP_NAME } from "../constants/brand";
 
 
 export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose: () => void; t: Theme }) {
@@ -40,7 +41,7 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
       <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5" style={{ background: t.bg, border: `1px solid ${t.border}`, scrollbarWidth: "none" }}>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.active }}>Bantuan Mela</p>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.active }}>Bantuan {APP_NAME}</p>
             <p className="text-lg font-extrabold" style={{ color: t.dark }}>Customer Service</p>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-black/5 transition-colors" style={{ color: t.muted }} aria-label="Tutup Customer Service">
@@ -54,7 +55,7 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
         </div>
         <div>
           <p className="text-xl font-extrabold text-white">Ada yang bisa kami bantu?</p>
-          <p className="text-sm text-white/80 mt-1">Tim Mela siap membantu kebutuhan Anda.</p>
+          <p className="text-sm text-white/80 mt-1">Tim {APP_NAME} siap membantu kebutuhan Anda.</p>
         </div>
         </div>
 
@@ -113,7 +114,7 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
               </a>
               <a href="https://wa.me/6281255550199" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl p-3" style={{ background: t.soft }}>
                 <MessageCircle size={17} color="#16a34a" />
-                <div><p className="text-xs font-bold" style={{ color: t.dark }}>WhatsApp Mela</p><p className="text-[10px]" style={{ color: t.muted }}>Balasan biasanya kurang dari 10 menit</p></div>
+                <div><p className="text-xs font-bold" style={{ color: t.dark }}>WhatsApp {APP_NAME}</p><p className="text-[10px]" style={{ color: t.muted }}>Balasan biasanya kurang dari 10 menit</p></div>
               </a>
             </div>
           </Card>

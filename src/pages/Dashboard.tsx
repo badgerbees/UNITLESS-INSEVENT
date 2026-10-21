@@ -1,65 +1,95 @@
 import React, { useState, useEffect } from "react";
-import { Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon, Check, CheckCheck, Zap, Navigation, Heart } from "lucide-react";
-import { Theme, EmergencyAlert } from "../types";
+import { Check, CheckCheck, Zap, Navigation, Heart, Hourglass, Layers, Scale, Ruler, Pill, ClipboardList, ChevronRight, CalendarDays } from "lucide-react";
+import { Theme, EmergencyAlert, Vitamin } from "../types";
 import { FruitIllustration } from "../components/FruitIllustration";
 import { OrganChip } from "../components/OrganChip";
+import { OrganIllustration, OrganKey } from "../components/OrganIllustration";
 import { StatTile } from "../components/StatTile";
+import { PregnancyTimeline } from "../components/PregnancyTimeline";
 import { SectionTitle } from "../components/SectionTitle";
 import { PillBtn } from "../components/PillBtn";
 import { Card } from "../components/Card";
 import { fmtDate, getFruit } from "../utils/helpers";
 
 
+// Rentang minggu kasar dari mulai terbentuk hingga matang, untuk bar estimasi kematangan
+const ORGAN_RANGE: Record<OrganKey, [number, number]> = {
+  brain: [3, 40], heart: [3, 34], lungs: [5, 37], eye: [4, 34], bone: [6, 40], limb: [4, 12], gut: [4, 36],
+};
+
+function organMaturity(organ: OrganKey, weeks: number) {
+  const [start, end] = ORGAN_RANGE[organ];
+  return Math.round(Math.min(1, Math.max(0.05, (weeks - start) / (end - start))) * 100);
+}
+
+const TRIMESTER_TIPS: Record<number, string[]> = {
+  1: [
+    "Konsumsi asam folat 400 mcg setiap hari.",
+    "Mual pagi wajar — makan porsi kecil tapi sering.",
+    "Istirahat cukup dan hindari asap rokok.",
+  ],
+  2: [
+    "Mulai latihan pernapasan ringan dan senam hamil.",
+    "Ajak janin bicara — ia sudah bisa mendengar suara Bunda.",
+    "Penuhi kebutuhan zat besi dan kalsium harian.",
+  ],
+  3: [
+    "Pantau gerakan janin setiap hari (min. 10 gerakan / 2 jam).",
+    "Siapkan tas persalinan dan dokumen penting.",
+    "Kenali tanda persalinan aktif: kontraksi teratur & pecah ketuban.",
+  ],
+};
+
 export function getOrganData(weeks: number) {
   if (weeks <= 8) return [
-    { Icon: Brain,       label: "Otak",    desc: "Tabung saraf menutup dan otak mulai membentuk tiga bagian utama: otak depan, tengah, dan belakang." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Jantung sudah berdetak! Tabung jantung sederhana mulai memompa darah pertama kalinya." },
-    { Icon: Eye,         label: "Mata",    desc: "Cekungan mata mulai terbentuk sebagai bintik-bintik gelap di kedua sisi kepala." },
-    { Icon: Bone,        label: "Kuncup",  desc: "Kuncup lengan dan kaki mulai muncul. Tangan dan kaki berbentuk seperti dayung kecil." },
-    { Icon: ActivityIcon,label: "Organ",   desc: "Usus, hati, dan ginjal primitif mulai terbentuk dari lapisan sel dalam." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Tabung saraf menutup dan otak mulai membentuk tiga bagian utama: otak depan, tengah, dan belakang." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Jantung sudah berdetak! Tabung jantung sederhana mulai memompa darah pertama kalinya." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Cekungan mata mulai terbentuk sebagai bintik-bintik gelap di kedua sisi kepala." },
+    { organ: "limb" as OrganKey, label: "Kuncup",  desc: "Kuncup lengan dan kaki mulai muncul. Tangan dan kaki berbentuk seperti dayung kecil." },
+    { organ: "gut" as OrganKey, label: "Organ",   desc: "Usus, hati, dan ginjal primitif mulai terbentuk dari lapisan sel dalam." },
   ];
   if (weeks <= 13) return [
-    { Icon: Brain,       label: "Otak",    desc: "Otak berkembang pesat — neuron terbentuk jutaan per menit. Refleks dasar mulai aktif." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Empat ruang jantung terbentuk. Detak dapat terdeteksi jelas lewat USG Doppler." },
-    { Icon: Wind,        label: "Paru",    desc: "Tunas paru-paru mulai bercabang membentuk bronkus. Belum berfungsi, tapi sudah ada." },
-    { Icon: Eye,         label: "Mata",    desc: "Kelopak mata terbentuk dan menutup untuk melindungi retina yang sedang berkembang." },
-    { Icon: Bone,        label: "Tulang",  desc: "Tulang rawan mulai mengeras menjadi tulang sejati. Jari tangan dan kaki sudah terpisah." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Otak berkembang pesat — neuron terbentuk jutaan per menit. Refleks dasar mulai aktif." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Empat ruang jantung terbentuk. Detak dapat terdeteksi jelas lewat USG Doppler." },
+    { organ: "lungs" as OrganKey, label: "Paru",    desc: "Tunas paru-paru mulai bercabang membentuk bronkus. Belum berfungsi, tapi sudah ada." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Kelopak mata terbentuk dan menutup untuk melindungi retina yang sedang berkembang." },
+    { organ: "bone" as OrganKey, label: "Tulang",  desc: "Tulang rawan mulai mengeras menjadi tulang sejati. Jari tangan dan kaki sudah terpisah." },
   ];
   if (weeks <= 19) return [
-    { Icon: Brain,       label: "Otak",    desc: "Permukaan otak mulai menunjukkan lekukan awal. Bayi sudah bisa merasakan sentuhan ringan." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Jantung berdetak 140–170 kali/menit. Suaranya bisa didengar dengan stetoskop biasa." },
-    { Icon: Wind,        label: "Paru",    desc: "Cabang bronkus terbentuk lebih banyak. Paru masih belum bisa bernapas udara." },
-    { Icon: Eye,         label: "Mata",    desc: "Alis dan bulu mata mulai tumbuh. Mata masih menutup rapat di balik kelopak." },
-    { Icon: Bone,        label: "Tulang",  desc: "Kerangka tulang semakin kuat. Gerakan janin mulai terasa sebagai 'flutter' halus." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Permukaan otak mulai menunjukkan lekukan awal. Bayi sudah bisa merasakan sentuhan ringan." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Jantung berdetak 140–170 kali/menit. Suaranya bisa didengar dengan stetoskop biasa." },
+    { organ: "lungs" as OrganKey, label: "Paru",    desc: "Cabang bronkus terbentuk lebih banyak. Paru masih belum bisa bernapas udara." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Alis dan bulu mata mulai tumbuh. Mata masih menutup rapat di balik kelopak." },
+    { organ: "bone" as OrganKey, label: "Tulang",  desc: "Kerangka tulang semakin kuat. Gerakan janin mulai terasa sebagai 'flutter' halus." },
   ];
   if (weeks <= 27) return [
-    { Icon: Brain,       label: "Otak",    desc: "Otak menyimpan memori dan mulai mengatur ritme tidur-bangun. Bayi bisa kaget oleh suara keras." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Sistem kardiovaskular matang. Jantung memompa sekitar 25 liter darah per hari." },
-    { Icon: Wind,        label: "Paru",    desc: "Surfaktan mulai diproduksi — zat penting agar kantung udara tidak kolaps saat lahir." },
-    { Icon: Eye,         label: "Mata",    desc: "Mata mulai membuka! Pupil bereaksi terhadap cahaya yang menembus dinding perut." },
-    { Icon: Bone,        label: "Tulang",  desc: "Sumsum tulang mulai memproduksi sel darah merah. Kalsium dari ibu diserap aktif." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Otak menyimpan memori dan mulai mengatur ritme tidur-bangun. Bayi bisa kaget oleh suara keras." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Sistem kardiovaskular matang. Jantung memompa sekitar 25 liter darah per hari." },
+    { organ: "lungs" as OrganKey, label: "Paru",    desc: "Surfaktan mulai diproduksi — zat penting agar kantung udara tidak kolaps saat lahir." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Mata mulai membuka! Pupil bereaksi terhadap cahaya yang menembus dinding perut." },
+    { organ: "bone" as OrganKey, label: "Tulang",  desc: "Sumsum tulang mulai memproduksi sel darah merah. Kalsium dari ibu diserap aktif." },
   ];
   if (weeks <= 35) return [
-    { Icon: Brain,       label: "Otak",    desc: "Korteks serebral berkembang pesat — otak mulai membentuk lipatan yang meningkatkan kapasitas pemrosesan." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Jantung berdetak 120–160 kali/menit. Empat ruang jantung sudah terbentuk sempurna." },
-    { Icon: Wind,        label: "Paru",    desc: "Paru-paru berlatih bernapas dengan menghirup cairan amnion. Surfaktan terus meningkat." },
-    { Icon: Eye,         label: "Mata",    desc: "Mata bisa merespons perubahan cahaya yang masuk melalui dinding perut ibu." },
-    { Icon: Bone,        label: "Tulang",  desc: "Tulang semakin mengeras. Kalsium dari asupan ibu sangat penting pada fase ini." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Korteks serebral berkembang pesat — otak mulai membentuk lipatan yang meningkatkan kapasitas pemrosesan." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Jantung berdetak 120–160 kali/menit. Empat ruang jantung sudah terbentuk sempurna." },
+    { organ: "lungs" as OrganKey, label: "Paru",    desc: "Paru-paru berlatih bernapas dengan menghirup cairan amnion. Surfaktan terus meningkat." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Mata bisa merespons perubahan cahaya yang masuk melalui dinding perut ibu." },
+    { organ: "bone" as OrganKey, label: "Tulang",  desc: "Tulang semakin mengeras. Kalsium dari asupan ibu sangat penting pada fase ini." },
   ];
   return [
-    { Icon: Brain,       label: "Otak",    desc: "Otak hampir sempurna — lipatan kortikal matang. Bayi sudah belajar dari stimulasi suara dan cahaya." },
-    { Icon: HeartPulse,  label: "Jantung", desc: "Sistem sirkulasi siap mandiri. Setelah lahir, foramen ovale jantung akan menutup otomatis." },
-    { Icon: Wind,        label: "Paru",    desc: "Paru-paru sudah matang dan siap bernapas udara. Produksi surfaktan optimal untuk kelahiran." },
-    { Icon: Eye,         label: "Mata",    desc: "Penglihatan fokus ±20–30 cm — tepat jarak dari muka ibu saat menyusui." },
-    { Icon: Bone,        label: "Tulang",  desc: "Tengkorak masih lunak untuk memudahkan persalinan. Tulang-tulang lain sudah keras dan siap." },
+    { organ: "brain" as OrganKey, label: "Otak",    desc: "Otak hampir sempurna — lipatan kortikal matang. Bayi sudah belajar dari stimulasi suara dan cahaya." },
+    { organ: "heart" as OrganKey, label: "Jantung", desc: "Sistem sirkulasi siap mandiri. Setelah lahir, foramen ovale jantung akan menutup otomatis." },
+    { organ: "lungs" as OrganKey, label: "Paru",    desc: "Paru-paru sudah matang dan siap bernapas udara. Produksi surfaktan optimal untuk kelahiran." },
+    { organ: "eye" as OrganKey, label: "Mata",    desc: "Penglihatan fokus ±20–30 cm — tepat jarak dari muka ibu saat menyusui." },
+    { organ: "bone" as OrganKey, label: "Tulang",  desc: "Tengkorak masih lunak untuk memudahkan persalinan. Tulang-tulang lain sudah keras dan siap." },
   ];
 }
 
-export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate, fruit, trimester, onEmergency, onGoHealth, vitDone, symptoms, motherName }: {
+export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate, fruit, trimester, onEmergency, onGoHealth, vitDone, vitamins, symptoms, motherName }: {
   t: Theme; weeksPreg: number; daysExtra: number; daysUntilDue: number;
   dueDate: Date; fruit: ReturnType<typeof getFruit>; trimester: number;
   onEmergency: () => void; onGoHealth: () => void;
-  vitDone: Record<string, boolean>; symptoms: Record<string, boolean>;
+  vitDone: Record<string, boolean>; vitamins: Vitamin[]; symptoms: Record<string, boolean>;
   motherName?: string;
 }) {
   const [activeChip, setActiveChip] = useState(0);
@@ -68,24 +98,30 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
 
   return (
     <div className="space-y-6 w-full">
+      {/* Salam — di luar kartu hero */}
+      <div>
+        <h2 className="text-2xl font-extrabold" style={{ color: t.dark }}>Selamat Datang, {motherName || "Bunda"}</h2>
+        <p className="text-sm mt-0.5" style={{ color: t.muted }}>Semoga Bunda dan si kecil sehat selalu hari ini.</p>
+      </div>
+
       {/* Hero */}
-      <div className="rounded-3xl overflow-hidden flex" style={{ background: t.grad, minHeight: 180 }}>
-        <div className="flex-1 p-8">
-          <p className="text-sm font-semibold mb-1" style={{ color: "rgba(255,255,255,0.65)" }}>Selamat Datang, {motherName || "Bunda"}</p>
-          <p className="text-4xl font-extrabold text-white leading-tight">
+      <div className="rounded-3xl overflow-hidden flex" style={{ background: t.grad }}>
+        <div className="flex-1 px-8 py-7">
+          <p className="text-sm font-semibold mb-1" style={{ color: "rgba(255,255,255,0.7)" }}>Usia kehamilan</p>
+          <p className="text-[2.1rem] font-extrabold text-white leading-tight">
             Minggu ke-<span style={{ color: "rgba(255,255,255,0.85)" }}>{weeksPreg}</span>
-            <span className="text-xl font-semibold ml-2" style={{ color: "rgba(255,255,255,0.5)" }}>+ {daysExtra} hari</span>
+            <span className="text-lg font-semibold ml-2" style={{ color: "rgba(255,255,255,0.5)" }}>+ {daysExtra} hari</span>
           </p>
-          <p className="text-sm mt-2" style={{ color: "rgba(255,255,255,0.5)" }}>HPL: {fmtDate(dueDate)}</p>
+          <p className="text-sm mt-1.5" style={{ color: "rgba(255,255,255,0.6)" }}>HPL: {fmtDate(dueDate)}</p>
           <div className="flex gap-3 mt-5">
             <button
               onClick={() => { setShowOrgans(v => !v); setActiveChip(0); }}
-              className="rounded-full px-6 py-2.5 text-sm font-bold transition-all flex items-center gap-2"
+              className="rounded-full px-6 py-2.5 text-[13px] font-bold transition-all flex items-center gap-2"
               style={{ background: showOrgans ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.22)", color: "#fff" }}>
               {showOrgans ? "Tutup Perkembangan" : "Lihat Perkembangan"}
             </button>
             <button onClick={onEmergency}
-              className="rounded-full px-6 py-2.5 text-sm font-bold transition-all"
+              className="rounded-full px-6 py-2.5 text-[13px] font-bold transition-all"
               style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}>
               Darurat
             </button>
@@ -94,21 +130,20 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
         {/* Clickable fruit */}
         <button
           onClick={() => { setShowOrgans(v => !v); setActiveChip(0); }}
-          className="flex flex-col items-center justify-center px-10 py-6 transition-all group relative"
+          className="flex flex-col items-center justify-center px-9 py-5 transition-all group relative"
           style={{ background: showOrgans ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.15)" }}
           title="Lihat perkembangan organ minggu ini"
         >
           <div
-            className="w-20 h-20 mb-3 transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
-            style={{ filter: showOrgans ? "drop-shadow(0 0 16px rgba(255,255,255,0.6))" : "drop-shadow(0 4px 12px rgba(0,0,0,0.1))" }}>
-            <FruitIllustration type={fruit.typeId} />
+            className="w-[84px] h-[84px] mb-2.5 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
+            style={{
+              background: "radial-gradient(circle at 50% 40%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.75) 60%, rgba(255,255,255,0.35) 100%)",
+              boxShadow: showOrgans ? "0 0 0 5px rgba(255,255,255,0.25), 0 6px 18px rgba(0,0,0,0.12)" : "0 6px 18px rgba(0,0,0,0.12)",
+            }}>
+            <div className="w-14 h-14"><FruitIllustration type={fruit.typeId} /></div>
           </div>
           <p className="text-sm font-bold text-white text-center">{fruit.name}</p>
           <p className="text-[11px] mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>{fruit.weight} · {fruit.length}</p>
-          <span className="mt-2 text-[10px] font-semibold rounded-full px-2.5 py-0.5 transition-all"
-            style={{ background: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.8)" }}>
-            {showOrgans ? "▲ tutup" : "▼ perkembangan"}
-          </span>
         </button>
       </div>
 
@@ -116,145 +151,172 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
       {showOrgans && (
         <Card t={t} className="p-6" style={{ borderLeft: `4px solid ${t.active}` }}>
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <SectionTitle>Perkembangan Organ — Minggu {weeksPreg}</SectionTitle>
-              <div className="flex items-center gap-2 mt-0.5">
-                <div className="w-5 h-5">
-                  <FruitIllustration type={fruit.typeId} />
-                </div>
-                <p className="text-xs" style={{ color: t.muted }}>
-                  {fruit.name} · {fruit.weight} · {fruit.length}
-                </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xs font-extrabold uppercase tracking-wider" style={{ color: "#4A4E4D", opacity: 0.6 }}>Perkembangan Organ — Minggu {weeksPreg}</h2>
+              <div className="flex items-center gap-1.5">
+                <div className="w-4 h-4"><FruitIllustration type={fruit.typeId} /></div>
+                <p className="text-xs" style={{ color: t.muted }}>{fruit.name} · {fruit.weight} · {fruit.length}</p>
               </div>
             </div>
-            <button onClick={() => setShowOrgans(false)} className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.muted }}>
-              Tutup ✕
-            </button>
           </div>
-          <div className="flex gap-3 flex-wrap mb-4">
+          <div className="grid grid-cols-5 gap-3 mb-4">
             {chips.map((c, i) => (
-              <OrganChip key={i} Icon={c.Icon} label={c.label} active={activeChip === i} onClick={() => setActiveChip(i)} t={t} />
+              <OrganChip key={i} organ={c.organ} label={c.label} active={activeChip === i} onClick={() => setActiveChip(i)} t={t} />
             ))}
           </div>
-          <div className="rounded-2xl p-5" style={{ background: t.soft }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
-                {(() => {
-                  const ActiveIcon = chips[activeChip].Icon;
-                  return <ActiveIcon size={20} color={t.active} strokeWidth={1.5} />;
-                })()}
+          {(() => {
+            const c = chips[activeChip];
+            const pct = organMaturity(c.organ, weeksPreg);
+            return (
+              <div key={activeChip} className="organ-fade-in rounded-2xl px-6 py-5 flex items-center gap-6"
+                style={{ background: `linear-gradient(135deg, ${t.soft} 0%, #fff 100%)`, border: `1px solid ${t.border}` }}>
+                <div className="relative shrink-0 w-24 h-24 rounded-full bg-white flex items-center justify-center">
+                  {/* cincin kematangan */}
+                  <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full -rotate-90">
+                    <circle cx="50" cy="50" r="46" stroke={t.border} strokeWidth="4" fill="none" />
+                    <circle cx="50" cy="50" r="46" stroke={t.active} strokeWidth="4" fill="none" strokeLinecap="round"
+                      strokeDasharray={`${(pct / 100) * 289} 289`} style={{ transition: "stroke-dasharray 0.6s ease" }} />
+                  </svg>
+                  <div className="w-10 h-10">
+                    <OrganIllustration organ={c.organ} color={t.active} />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-extrabold" style={{ color: t.dark }}>{c.label}</p>
+                  <p className="text-sm leading-relaxed mt-1" style={{ color: "#6b6b6b" }}>{c.desc}</p>
+                  <div className="mt-3">
+                    <div className="flex justify-between text-[11px] font-semibold mb-1.5" style={{ color: t.muted }}>
+                      <span>Estimasi kematangan</span>
+                      <span style={{ color: t.active }}>{pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: t.border }}>
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: t.grad, transition: "width 0.6s ease" }} />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm font-extrabold" style={{ color: t.dark }}>{chips[activeChip].label}</p>
-            </div>
-            <p className="text-sm leading-relaxed" style={{ color: t.muted }}>{chips[activeChip].desc}</p>
-          </div>
+            );
+          })()}
         </Card>
       )}
 
+      {/* Timeline 40 minggu */}
+      <PregnancyTimeline t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} />
+
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <StatTile label="Sisa Hari"      value={daysUntilDue} sub="Menuju HPL"       t={t} accent />
-        <StatTile label="Trimester"      value={trimester}    sub="dari 3 trimester" t={t} />
-        <StatTile label="Berat Janin"    value={fruit.weight} sub="estimasi"         t={t} />
-        <StatTile label="Status Hari Ini" value="Normal"      sub="Tidak ada bahaya" t={t} />
+        <StatTile icon={Hourglass} label="Sisa Hari"    value={daysUntilDue} sub="hari lagi"       t={t} accent />
+        <StatTile icon={Layers}    label="Trimester"    value={trimester}    sub="dari 3"          t={t} />
+        <StatTile icon={Scale}     label="Berat Janin"  value={fruit.weight} sub="estimasi"        t={t} />
+        <StatTile icon={Ruler}     label="Panjang Janin" value={fruit.length} sub="estimasi"       t={t} />
       </div>
 
-      {/* Widget ringkasan harian */}
-      {(() => {
-        const TOTAL_VIT = 4;
-        const vitCount  = Object.values(vitDone).filter(Boolean).length;
-        const symCount  = Object.values(symptoms).filter(Boolean).length;
-        const vitAllDone = vitCount === TOTAL_VIT;
-        const symLogged  = symCount > 0;
-        return (
-          <button onClick={onGoHealth} className="w-full text-left">
-            <div className="rounded-2xl px-5 py-4 flex items-center gap-4 transition-all hover:brightness-95"
-              style={{ background: t.soft, border: `1.5px solid ${t.border}` }}>
-              <div className="text-xs font-bold uppercase tracking-wide flex-shrink-0" style={{ color: t.muted }}>Pemantauan Harian</div>
-              <div className="flex gap-3 flex-1">
-                {/* Vitamin */}
-                <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-white flex-1">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: vitAllDone ? "#22c55e" : t.primary }}>
-                    {vitAllDone
-                      ? <Check size={13} className="text-white" />
-                      : <span className="text-[10px] font-bold text-white">V</span>}
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold" style={{ color: vitAllDone ? "#166534" : t.dark }}>Vitamin</p>
-                    <p className="text-[10px]" style={{ color: t.muted }}>{vitCount}/{TOTAL_VIT} diminum</p>
-                  </div>
-                </div>
-                {/* Gejala */}
-                <div className="flex items-center gap-2 rounded-xl px-3 py-2 bg-white flex-1">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: symLogged ? (symCount >= 1 ? "#f59e0b" : "#22c55e") : t.muted }}>
-                    <span className="text-[10px] font-bold text-white">{symLogged ? symCount : "—"}</span>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold" style={{ color: t.dark }}>Log Gejala</p>
-                    <p className="text-[10px]" style={{ color: t.muted }}>{symLogged ? `${symCount} gejala dicatat` : "Belum diisi hari ini"}</p>
-                  </div>
-                </div>
-              </div>
-              <span className="text-xs font-bold flex-shrink-0" style={{ color: t.active }}>Buka →</span>
-            </div>
-          </button>
-        );
-      })()}
-
-      {/* Bottom grid */}
+      {/* Bottom grid — 3 kartu sama lebar */}
       <div className="grid grid-cols-3 gap-4">
-        <Card t={t} className="col-span-2 p-6">
+        <Card t={t} className="p-6 flex flex-col">
           <SectionTitle>Tips Trimester {trimester}</SectionTitle>
-          <p className="text-sm leading-relaxed mb-5" style={{ color: t.muted }}>
-            {trimester === 1 && "Istirahat cukup dan konsumsi asam folat 400 mcg setiap hari. Mual pagi hari wajar — makan porsi kecil tapi sering."}
-            {trimester === 2 && "Mulai latihan pernapasan ringan dan senam hamil. Janin sudah bisa mendengar suara Anda — ajak bicara dan putar musik lembut."}
-            {trimester === 3 && "Pantau gerakan janin setiap hari (min. 10 gerakan / 2 jam). Siapkan tas persalinan dan kenali tanda-tanda persalinan aktif."}
-          </p>
-          <div className="rounded-2xl p-4" style={{ background: t.soft }}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-bold" style={{ color: t.dark }}>ANC Berikutnya</p>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: t.active }}>Akan Datang</span>
+          <ul className="space-y-2.5 mb-5">
+            {TRIMESTER_TIPS[trimester].map(tip => (
+              <li key={tip} className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style={{ background: t.soft }}>
+                  <Check size={12} color={t.active} strokeWidth={3} />
+                </span>
+                <span className="text-sm leading-relaxed" style={{ color: "#6b6b6b" }}>{tip}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-auto rounded-2xl p-4 flex items-center gap-4" style={{ background: t.soft }}>
+            <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0" style={{ background: t.grad }}>
+              <span className="text-[10px] font-semibold leading-none uppercase">Jan</span>
+              <span className="text-xl font-extrabold leading-none mt-0.5">23</span>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0" style={{ background: t.primary }}>
-                <span className="text-[10px] leading-none">Jan</span>
-                <span className="text-lg font-extrabold leading-none">23</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <CalendarDays size={13} color={t.active} />
+                <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: t.active }}>ANC Berikutnya</p>
               </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: t.dark }}>Tes Diabetes Gestasional</p>
-                <p className="text-xs" style={{ color: t.muted }}>RSIA Bunda · Minggu 24–28</p>
-              </div>
-              <button className="ml-auto text-xs font-bold px-3 py-1.5 rounded-full text-white" style={{ background: t.primary }}>Detail</button>
+              <p className="text-sm font-bold" style={{ color: t.dark }}>Tes Diabetes Gestasional</p>
+              <p className="text-xs" style={{ color: t.muted }}>RSIA Bunda · Minggu 24–28</p>
             </div>
+            <button className="text-xs font-bold px-4 py-2 rounded-full flex-shrink-0 bg-white" style={{ color: t.active }}>Detail</button>
           </div>
         </Card>
 
-        <Card t={t} className="p-5">
+        {/* Pemantauan harian — shortcut ke halaman Kesehatan */}
+        {(() => {
+          const TOTAL_VIT = vitamins.length;
+          const vitCount  = vitamins.filter(v => vitDone[v.id]).length;
+          const symCount  = Object.values(symptoms).filter(Boolean).length;
+          const vitAllDone = TOTAL_VIT > 0 && vitCount === TOTAL_VIT;
+          const symLogged  = symCount > 0;
+          const shortcuts = [
+            {
+              Icon: Pill, title: "Vitamin hari ini",
+              text: TOTAL_VIT ? `${vitCount} dari ${TOTAL_VIT} sudah diminum` : "Belum ada vitamin",
+              done: vitAllDone, pct: TOTAL_VIT ? (vitCount / TOTAL_VIT) * 100 : 0,
+            },
+            {
+              Icon: ClipboardList, title: "Log gejala",
+              text: symLogged ? `${symCount} gejala dicatat hari ini` : "Belum diisi hari ini",
+              done: symLogged, pct: symLogged ? 100 : 0,
+            },
+          ];
+          return (
+            <Card t={t} className="p-6 flex flex-col">
+              <SectionTitle>Pemantauan Harian</SectionTitle>
+              <div className="flex flex-col gap-3 flex-1">
+                {shortcuts.map(({ Icon, title, text, done, pct }) => (
+                  <button key={title} onClick={onGoHealth}
+                    className="flex-1 flex flex-col justify-center rounded-2xl p-4 text-left transition-all hover:brightness-[0.98]"
+                    style={{ background: done ? "#f0fdf4" : t.soft }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: done ? "#22c55e" : "#fff" }}>
+                        {done ? <Check size={18} className="text-white" /> : <Icon size={18} color={t.active} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold" style={{ color: done ? "#166534" : t.dark }}>{title}</p>
+                        <p className="text-xs" style={{ color: t.muted }}>{text}</p>
+                      </div>
+                      <ChevronRight size={16} color={t.muted} />
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden mt-3" style={{ background: done ? "#dcfce7" : "#fff" }}>
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: done ? "#22c55e" : t.active }} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          );
+        })()}
+
+        <Card t={t} className="p-6 flex flex-col">
           <SectionTitle>Status Kesehatan</SectionTitle>
-          <div className="flex items-center gap-3 rounded-2xl p-3 mb-4" style={{ background: "#f0fdf4" }}>
+          <div className="flex items-center gap-3 rounded-2xl p-3 mb-3" style={{ background: "#f0fdf4" }}>
             <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
               <Check size={18} className="text-white" />
             </div>
             <div>
               <p className="text-sm font-bold text-green-700">Normal</p>
-              <p className="text-[11px] text-green-600">Tidak ada bahaya</p>
+              <p className="text-[11px] text-green-600">Tidak ada tanda bahaya</p>
             </div>
           </div>
-          {[
-            { l: "Tekanan Darah", v: "118/76 mmHg" },
-            { l: "Kenaikan BB",    v: "+11.2 kg"    },
-            { l: "Gerakan Janin", v: "8 / 10 kick"  },
-          ].map(({ l, v }) => (
-            <div key={l} className="flex justify-between py-2 border-b last:border-0" style={{ borderColor: t.border }}>
-              <p className="text-xs" style={{ color: t.muted }}>{l}</p>
-              <p className="text-xs font-bold" style={{ color: t.dark }}>{v}</p>
-            </div>
-          ))}
-          <div className="mt-4">
-            <PillBtn full variant="active" size="sm" t={t}>Log Harian</PillBtn>
+          <div className="flex-1">
+            {[
+              { l: "Tekanan Darah", v: "118/76 mmHg" },
+              { l: "Kenaikan BB",   v: "+11.2 kg"    },
+              { l: "Gerakan Janin", v: "8 / 10 kick" },
+            ].map(({ l, v }) => (
+              <div key={l} className="flex justify-between py-2.5 border-b last:border-0" style={{ borderColor: t.border }}>
+                <p className="text-xs" style={{ color: t.muted }}>{l}</p>
+                <p className="text-xs font-bold" style={{ color: t.dark }}>{v}</p>
+              </div>
+            ))}
           </div>
+          <button onClick={onGoHealth} className="mt-3 text-xs font-bold flex items-center justify-center gap-1 rounded-full py-2"
+            style={{ background: t.soft, color: t.active }}>
+            Lihat detail kesehatan <ChevronRight size={14} />
+          </button>
         </Card>
       </div>
     </div>

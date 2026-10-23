@@ -1,6 +1,7 @@
 import { getSupabaseClient } from "../lib/supabase";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/$/, "");
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+const API_URL = (configuredApiUrl || (import.meta.env.DEV ? "http://localhost:8000/api" : "")).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -10,6 +11,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!API_URL) {
+    throw new Error("VITE_API_URL is required in production.");
+  }
   const { data } = await getSupabaseClient().auth.getSession();
   const token = data.session?.access_token;
 

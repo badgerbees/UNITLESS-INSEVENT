@@ -146,6 +146,8 @@ export function ResourcesScreen({ t }: { t: Theme }) {
 
   const [editMode, setEditMode] = useState(false);
   const [newInputs, setNewInputs] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const total   = cats.reduce((acc, cat) => acc + cat.items.length, 0);
   const doneCnt = cats.reduce((acc, cat) => acc + cat.items.filter(i => items[i.id]).length, 0);
@@ -161,6 +163,12 @@ export function ResourcesScreen({ t }: { t: Theme }) {
 
   useEffect(() => {
     let active = true;
+    let pending = 2;
+    const completeRequest = () => {
+      pending -= 1;
+      if (active && pending === 0) setLoading(false);
+    };
+
     api.getChecklist()
       .then(remoteCategories => {
         if (!active || remoteCategories.length === 0) return;
@@ -172,8 +180,10 @@ export function ResourcesScreen({ t }: { t: Theme }) {
         setItems(Object.fromEntries(remoteCategories.flatMap(category => category.items.map(item => [item.id, item.completed]))));
       })
       .catch(error => {
+        if (active) setLoadError(true);
         if (!(error instanceof ApiError && error.status === 404)) console.error("Failed to load preparation checklist", error);
-      });
+      })
+      .finally(completeRequest);
 
     api.getBirthPlan()
       .then(remotePlan => {
@@ -181,11 +191,23 @@ export function ResourcesScreen({ t }: { t: Theme }) {
         setBirthPlan(previous => ({ ...previous, ...Object.fromEntries(remotePlan.map(option => [option.option_key, option.selected])) }));
       })
       .catch(error => {
+        if (active) setLoadError(true);
         if (!(error instanceof ApiError && error.status === 404)) console.error("Failed to load birth plan", error);
-      });
+      })
+      .finally(completeRequest);
 
     return () => { active = false; };
   }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full rounded-3xl p-10 text-center" style={{ background: t.card, border: `1px solid ${t.border}` }}>
+        <div className="w-10 h-10 rounded-full border-4 mx-auto mb-4 animate-spin" style={{ borderColor: `${t.active}30`, borderTopColor: t.active }} />
+        <p className="text-sm font-bold" style={{ color: t.dark }}>Memuat persiapan persalinan...</p>
+        <p className="text-xs mt-1" style={{ color: t.muted }}>Mengambil checklist dan rencana persalinan tersimpan.</p>
+      </div>
+    );
+  }
 
   const birthPlanList = [
     { id: "imd", label: "Inisiasi Menyusui Dini (IMD)", sub: "Jika ibu dan bayi stabil", Icon: Heart },
@@ -227,6 +249,11 @@ export function ResourcesScreen({ t }: { t: Theme }) {
 
   return (
     <div className="space-y-5 w-full">
+      {loadError && (
+        <div className="rounded-2xl px-4 py-3 text-xs" style={{ background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" }}>
+          Data tersimpan belum dapat dimuat. Tampilan sementara digunakan; coba muat ulang halaman.
+        </div>
+      )}
       <div className="rounded-3xl p-6 flex items-center gap-6" style={{ background: t.grad }}>
         <div className="flex-1">
           <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>Kesiapan Tas Persalinan</p>

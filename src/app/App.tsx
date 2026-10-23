@@ -4,7 +4,7 @@ import {
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
   PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
-  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
+  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, Menu
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Theme, Mode, Screen, UserProfile } from "../types";
@@ -439,6 +439,7 @@ export default function App() {
   const [showNotif, setShowNotif] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomerService, setShowCustomerService] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -515,11 +516,19 @@ export default function App() {
   );
 
   return (
-    <div className="flex min-h-screen w-full transition-colors duration-300"
+    <div className="app-shell flex min-h-screen w-full transition-colors duration-300"
       style={{ fontFamily: "'Manrope', sans-serif", background: t.bg }}
     >
+      {showMobileNav && (
+        <button
+          type="button"
+          aria-label="Tutup menu navigasi"
+          className="mobile-nav-backdrop fixed inset-0 z-20 bg-black/20 backdrop-blur-[2px]"
+          onClick={() => setShowMobileNav(false)}
+        />
+      )}
       {/* Sidebar */}
-      <aside className="flex flex-col flex-shrink-0 sticky top-0 h-screen transition-colors duration-300"
+      <aside className={`app-sidebar flex flex-col flex-shrink-0 sticky top-0 h-screen transition-colors duration-300 ${showMobileNav ? "mobile-nav-open" : ""}`}
         style={{ width: 240, background: "#ffffff", borderRight: `1px solid ${t.border}` }}
       >
         {/* Logo */}
@@ -556,8 +565,8 @@ export default function App() {
           {navItems.map(({ id, label, Icon }) => {
             const active = screen === id;
             return (
-              <button key={id} onClick={() => navigate("/" + id)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all hover:scale-[1.02] hover:bg-black/5"
+              <button key={id} onClick={() => { navigate("/" + id); setShowMobileNav(false); }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all hover:scale-[1.02] hover:bg-black/5 ${active ? "nav-item-active" : ""}`}
                 style={{
                   background: active ? t.soft : "transparent",
                   color: active ? t.active : "#999",
@@ -570,7 +579,7 @@ export default function App() {
             );
           })}
           <div className="pt-2 space-y-1">
-            <button onClick={() => navigate("/emergency")}
+            <button onClick={() => { navigate("/emergency"); setShowMobileNav(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all hover:scale-[1.02] hover:bg-black/5"
               style={{ background: screen === "emergency" ? "#fff0f0" : "transparent", color: "#ef4444" }}
             >
@@ -583,7 +592,7 @@ export default function App() {
         {/* Pivot Mode Card */}
         {mode === "mother" && (
           <div className="px-4 pb-4 flex-shrink-0">
-            <div onClick={() => navigate("/postpartum")}
+            <div onClick={() => { navigate("/postpartum"); setShowMobileNav(false); }}
               className="rounded-2xl p-3 flex flex-col gap-2.5 cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden"
               style={{ background: t.soft, border: `1.5px solid ${t.border}` }}
             >
@@ -609,10 +618,20 @@ export default function App() {
       {/* Main */}
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Topbar */}
-        <header className="sticky top-0 z-10 flex items-center justify-between px-8 py-4 flex-shrink-0 transition-colors duration-300"
+        <header className="app-topbar sticky top-0 z-10 flex items-center justify-between px-8 py-4 flex-shrink-0 transition-colors duration-300"
           style={{ background: t.bg + "e8", backdropFilter: "blur(12px)", borderBottom: `1px solid ${t.border}` }}
         >
-          <div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Buka menu navigasi"
+              className="mobile-menu-button w-10 h-10 rounded-xl items-center justify-center transition-all"
+              style={{ color: t.active, background: t.soft }}
+              onClick={() => setShowMobileNav(true)}
+            >
+              <Menu size={20} />
+            </button>
+            <div>
             {/* Di Beranda, bar atas menampilkan nama web; minggu kehamilan sudah tampil di kartu hero */}
             <h1 className="text-xl font-extrabold leading-none" style={{ color: t.dark }}>
               {screen === "dashboard" ? APP_NAME : screenLabel[screen as Screen]}
@@ -620,6 +639,7 @@ export default function App() {
             <p className="text-xs mt-0.5" style={{ color: t.muted }}>
               {fmtDate(today)}{screen !== "dashboard" && ` · Kehamilan minggu ${weeksPreg}+${daysExtra}`}
             </p>
+            </div>
           </div>
           <div className="flex items-center gap-3 relative">
             
@@ -795,7 +815,7 @@ export default function App() {
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-6" style={{ scrollbarWidth: "none" }}>
+        <div key={screen} className="app-content flex-1 overflow-y-auto px-6 py-6" style={{ scrollbarWidth: "none" }}>
           <AppRoutes
             t={t}
             mode={mode}
@@ -989,5 +1009,3 @@ function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose
 
 
 // ─── Postpartum Screen ────────────────────────────────────────────────────────
-
-

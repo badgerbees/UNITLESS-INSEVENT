@@ -105,7 +105,7 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
       </div>
 
       {/* Hero */}
-      <div className="rounded-3xl overflow-hidden flex" style={{ background: t.grad }}>
+      <div className="dashboard-hero rounded-3xl overflow-hidden flex" style={{ background: t.grad }}>
         <div className="flex-1 px-8 py-7">
           <p className="text-sm font-semibold mb-1" style={{ color: "rgba(255,255,255,0.7)" }}>Usia kehamilan</p>
           <p className="text-[2.1rem] font-extrabold text-white leading-tight">
@@ -135,7 +135,7 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
           title="Lihat perkembangan organ minggu ini"
         >
           <div
-            className="w-[84px] h-[84px] mb-2.5 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
+            className="dashboard-fruit w-[84px] h-[84px] mb-2.5 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-110 group-active:scale-95"
             style={{
               background: "radial-gradient(circle at 50% 40%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.75) 60%, rgba(255,255,255,0.35) 100%)",
               boxShadow: showOrgans ? "0 0 0 5px rgba(255,255,255,0.25), 0 6px 18px rgba(0,0,0,0.12)" : "0 6px 18px rgba(0,0,0,0.12)",

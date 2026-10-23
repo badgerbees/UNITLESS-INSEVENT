@@ -22,9 +22,11 @@ export const DEFAULT_VITAMINS: Vitamin[] = [
 ];
 const VITAMIN_COLORS = ["#e899a6", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#8b5cf6", "#a0a0a0"];
 
-export function VitaminTracker({ t, done, setDone, vitamins, setVitamins, className = "" }: {
+export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, setVitamins, onSaveVitamins, className = "" }: {
   t: Theme; done: Record<string, boolean>; setDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>; className?: string;
+  onToggleVitamin: (id: string, completed: boolean) => void;
+  vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>;
+  onSaveVitamins: (vitamins: Vitamin[]) => void; className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState<Vitamin[]>([]);
@@ -45,7 +47,7 @@ export function VitaminTracker({ t, done, setDone, vitamins, setVitamins, classN
   function saveEdit() {
     const cleaned = draft.map(v => ({ ...v, label: v.label.trim(), dose: v.dose.trim() })).filter(v => v.label);
     const keep = new Set(cleaned.map(v => v.id));
-    setVitamins(cleaned);
+    onSaveVitamins(cleaned);
     setDone(p => Object.fromEntries(Object.entries(p).filter(([id]) => keep.has(id))));
     setEditing(false);
   }
@@ -114,7 +116,7 @@ export function VitaminTracker({ t, done, setDone, vitamins, setVitamins, classN
           ) : (
             <div className="grid grid-cols-2 gap-2 flex-1">
               {vitamins.map(v => (
-                <button key={v.id} onClick={() => setDone(p => ({ ...p, [v.id]: !p[v.id] }))}
+                <button key={v.id} onClick={() => onToggleVitamin(v.id, !done[v.id])}
                   className="flex items-center gap-3 rounded-xl px-3 py-3 transition-all text-left w-full"
                   style={{ background: done[v.id] ? "#f0fdf4" : t.soft, border: `1.5px solid ${done[v.id] ? "#22c55e40" : "transparent"}` }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
@@ -144,12 +146,15 @@ export function VitaminTracker({ t, done, setDone, vitamins, setVitamins, classN
   );
 }
 
-export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, vitamins, setVitamins, symptoms, setSymptoms, customSymptoms, setCustomSymptoms }: {
+export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, onToggleVitamin, vitamins, setVitamins, onSaveVitamins, symptoms, setSymptoms, onToggleSymptom, customSymptoms, setCustomSymptoms }: {
   t: Theme; onEmergency: () => void;
   vitalLogs: VitalLog[]; onAddVital: (v: VitalLog) => void;
   vitDone: Record<string, boolean>; setVitDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onToggleVitamin: (id: string, completed: boolean) => void;
   vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>;
+  onSaveVitamins: (vitamins: Vitamin[]) => void;
   symptoms: Record<string, boolean>; setSymptoms: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onToggleSymptom: (id: string, active: boolean, label: string, risk: Risk) => void;
   customSymptoms: CustomSymptom[]; setCustomSymptoms: React.Dispatch<React.SetStateAction<CustomSymptom[]>>;
 }) {
   const [newSym, setNewSym] = useState("");
@@ -545,7 +550,7 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
               const rc = { green: "#22c55e", yellow: "#f59e0b", red: "#ef4444" }[r];
               return (
                 <button key={id}
-                  onClick={() => setSymptoms(p => ({ ...p, [id]: !p[id] }))}
+                  onClick={() => onToggleSymptom(id, !symptoms[id], label, r)}
                   className="rounded-xl px-3 py-2.5 text-xs font-semibold transition-all text-center"
                   style={{
                     background: symptoms[id] ? rc + "15" : t.soft,
@@ -594,7 +599,7 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
             </p>
           </div>
         </Card>
-        <VitaminTracker t={t} done={vitDone} setDone={setVitDone} vitamins={vitamins} setVitamins={setVitamins} className="h-full" />
+        <VitaminTracker t={t} done={vitDone} setDone={setVitDone} onToggleVitamin={onToggleVitamin} vitamins={vitamins} setVitamins={setVitamins} onSaveVitamins={onSaveVitamins} className="h-full" />
       </div>
     </div>
   );

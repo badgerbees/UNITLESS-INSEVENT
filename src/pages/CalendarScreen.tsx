@@ -5,6 +5,7 @@ import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
 import { StatTile } from "../components/StatTile";
 import { fmtDate, addDays } from "../utils/helpers";
+import { api, ApiError } from "../services/api";
 import {
   Home, Activity, Calendar, FileText, Package, Bell,
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
@@ -12,7 +13,7 @@ import {
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
-type CalEvent = { date: string; label: string; type: "anc" | "vitamin" | "hpl" | "other" };
+type CalEvent = { id?: string; date: string; label: string; type: "anc" | "vitamin" | "hpl" | "other"; notes?: string; completed?: boolean };
 
 const ALL_EVENTS: CalEvent[] = [
   { date: "2025-01-23", label: "ANC – Tes Diabetes Gestasional", type: "anc"     },
@@ -43,14 +44,52 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: "", label: "", type: "anc" as CalEvent["type"] });
 
-  function addEvent() {
+  useEffect(() => {
+    let active = true;
+    api.getCalendarEvents()
+      .then(remoteEvents => {
+        if (!active) return;
+        setEvents(remoteEvents.map(event => ({
+          id: event.id,
+          date: event.event_date,
+          label: event.label,
+          type: event.event_type,
+          notes: event.notes || undefined,
+          completed: event.completed,
+        })));
+      })
+      .catch(error => {
+        if (!(error instanceof ApiError && error.status === 404)) console.error("Failed to load calendar events", error);
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function addEvent() {
     if (!form.date || !form.label) return;
-    setEvents(p => [...p, { ...form }]);
+    const localId = `local-${Date.now()}`;
+    setEvents(p => [...p, { id: localId, ...form }]);
     setForm({ date: selectedDay ?? "", label: "", type: "anc" });
     setShowForm(false);
+    try {
+      const event = await api.createCalendarEvent({ event_date: form.date, label: form.label, event_type: form.type });
+      setEvents(previous => previous.map(item => item.id === localId ? {
+        id: event.id,
+        date: event.event_date,
+        label: event.label,
+        type: event.event_type,
+        notes: event.notes || undefined,
+        completed: event.completed,
+      } : item));
+    } catch (error) {
+      console.error("Failed to save calendar event", error);
+    }
   }
   function deleteEvent(idx: number) {
+    const event = events[idx];
     setEvents(p => p.filter((_, i) => i !== idx));
+    if (event?.id && !event.id.startsWith("local-")) {
+      void api.deleteCalendarEvent(event.id).catch(error => console.error("Failed to delete calendar event", error));
+    }
   }
 
   const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
@@ -131,7 +170,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
           </div>
 
           {/* Right — stats strip */}
-          <div className="flex divide-x" style={{ borderLeft: "1px solid rgba(255,255,255,0.15)", divideColor: "rgba(255,255,255,0.15)" }}>
+              <div className="flex divide-x" style={{ borderLeft: "1px solid rgba(255,255,255,0.15)" }}>
             {[
               { label: "Sisa Hari",   value: daysUntilDue },
               { label: "Sisa Minggu", value: Math.max(0, Math.ceil(daysUntilDue / 7)) },

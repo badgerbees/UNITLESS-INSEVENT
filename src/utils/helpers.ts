@@ -1,7 +1,9 @@
 export function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 export function fmtDate(d: Date) { return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }); }
 
-const FRUITS: Record<number, { name: string; typeId: number; weight: string; length: string }> = {
+export type Fruit = { name: string; typeId: number; weight: string; length: string };
+
+const FRUITS: Record<number, Fruit> = {
   6:  { name: "Kacang Polong", typeId: 6,  weight: "< 1 g",  length: "0.6 cm"  },
   8:  { name: "Raspberry",     typeId: 8,  weight: "1 g",    length: "1.6 cm"  },
   12: { name: "Jeruk Nipis",   typeId: 12, weight: "14 g",   length: "5.4 cm"  },

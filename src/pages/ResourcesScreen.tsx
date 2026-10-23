@@ -13,6 +13,7 @@ import {
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
 import { APP_NAME } from "../constants/brand";
+import { api, ApiError } from "../services/api";
 
 
 export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose: () => void; t: Theme }) {
@@ -158,6 +159,34 @@ export function ResourcesScreen({ t }: { t: Theme }) {
     rooming: true,
   });
 
+  useEffect(() => {
+    let active = true;
+    api.getChecklist()
+      .then(remoteCategories => {
+        if (!active || remoteCategories.length === 0) return;
+        setCats(remoteCategories.map(category => ({
+          id: category.id,
+          label: category.name,
+          items: category.items.map(item => ({ id: item.id, l: item.label })),
+        })));
+        setItems(Object.fromEntries(remoteCategories.flatMap(category => category.items.map(item => [item.id, item.completed]))));
+      })
+      .catch(error => {
+        if (!(error instanceof ApiError && error.status === 404)) console.error("Failed to load preparation checklist", error);
+      });
+
+    api.getBirthPlan()
+      .then(remotePlan => {
+        if (!active || remotePlan.length === 0) return;
+        setBirthPlan(previous => ({ ...previous, ...Object.fromEntries(remotePlan.map(option => [option.option_key, option.selected])) }));
+      })
+      .catch(error => {
+        if (!(error instanceof ApiError && error.status === 404)) console.error("Failed to load birth plan", error);
+      });
+
+    return () => { active = false; };
+  }, []);
+
   const birthPlanList = [
     { id: "imd", label: "Inisiasi Menyusui Dini (IMD)", sub: "Jika ibu dan bayi stabil", Icon: Heart },
     { id: "suami", label: "Suami mendampingi", sub: "Selama proses persalinan", Icon: Users },
@@ -177,6 +206,23 @@ export function ResourcesScreen({ t }: { t: Theme }) {
 
   function handleDelete(catId: string, itemId: string) {
     setCats(prev => prev.map(c => c.id === catId ? { ...c, items: c.items.filter(i => i.id !== itemId) } : c));
+    if (!itemId.startsWith("custom_")) {
+      void api.deleteChecklistItem(itemId).catch(error => console.error("Failed to delete checklist item", error));
+    }
+  }
+
+  function toggleChecklistItem(id: string) {
+    const completed = !items[id];
+    setItems(previous => ({ ...previous, [id]: completed }));
+    if (!id.startsWith("custom_")) {
+      void api.updateChecklistItem(id, { completed }).catch(error => console.error("Failed to update checklist item", error));
+    }
+  }
+
+  function toggleBirthPlan(optionKey: string) {
+    const selected = !birthPlan[optionKey];
+    setBirthPlan(previous => ({ ...previous, [optionKey]: selected }));
+    void api.updateBirthPlan(optionKey, selected).catch(error => console.error("Failed to update birth plan", error));
   }
 
   return (
@@ -212,7 +258,7 @@ export function ResourcesScreen({ t }: { t: Theme }) {
             <div className="space-y-2 flex-1">
               {cat.items.map(({ id, l }) => (
                 <div key={id} className="flex items-center gap-2">
-                  <button onClick={() => setItems(p => ({ ...p, [id]: !p[id] }))}
+                  <button onClick={() => toggleChecklistItem(id)}
                     className="flex-1 flex items-center gap-2 rounded-xl px-2 py-2 transition-all"
                     style={{ background: items[id] ? "#f0fdf4" : t.soft }}>
                     <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0" style={{ background: items[id] ? "#22c55e" : t.border }}>
@@ -263,7 +309,7 @@ export function ResourcesScreen({ t }: { t: Theme }) {
           </div>
           <div className="flex flex-col gap-2">
             {birthPlanList.map(bp => (
-              <button key={bp.id} onClick={() => setBirthPlan(p => ({...p, [bp.id]: !p[bp.id]}))}
+              <button key={bp.id} onClick={() => toggleBirthPlan(bp.id)}
                 className="flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:brightness-95"
                 style={{ background: birthPlan[bp.id] ? t.soft : "#f9f9f9", border: `1.5px solid ${birthPlan[bp.id] ? t.primary : "transparent"}` }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white shadow-sm">

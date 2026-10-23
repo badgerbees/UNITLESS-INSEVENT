@@ -4,14 +4,18 @@ import { THEMES } from "../constants/theme";
 import { Mode } from "../types";
 import { Card } from "../components/Card";
 import { APP_NAME } from "../constants/brand";
+import { auth, type AuthForm } from "../services/auth";
 
-export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
+export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<{ message?: string } | void> }) {
   const [loginMode, setLoginMode] = useState<Mode>("mother");
   const [authView, setAuthView] = useState<"login" | "register" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const t = THEMES[loginMode];
 
   return (
@@ -82,14 +86,15 @@ export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
                   />
                 </div>
                 <div className="col-span-1">
-                  <p className="text-xs font-bold mb-1.5 ml-1" style={{ color: t.dark }}>Email atau Nomor HP</p>
+                  <p className="text-xs font-bold mb-1.5 ml-1" style={{ color: t.dark }}>Alamat Email</p>
                   <div className="relative">
                     <Mail size={16} color={t.muted} className="absolute left-4 top-1/2 -translate-y-1/2" />
                     <input
-                      type="text"
+                      type="email"
                       className="w-full rounded-2xl pl-11 pr-4 py-3.5 text-sm outline-none border-2 transition-all focus:bg-white"
                       style={{ borderColor: "transparent", background: "#f2f2f2", color: t.dark }}
                       placeholder="bunda@email.com"
+                      autoComplete="email"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       onFocus={e => e.target.style.borderColor = t.active}
@@ -133,14 +138,15 @@ export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
             ) : (
               <>
                 <div>
-                  <p className="text-xs font-bold mb-1.5 ml-1" style={{ color: t.dark }}>Email atau Nomor HP</p>
+                  <p className="text-xs font-bold mb-1.5 ml-1" style={{ color: t.dark }}>Alamat Email</p>
                   <div className="relative">
                     <Mail size={16} color={t.muted} className="absolute left-4 top-1/2 -translate-y-1/2" />
                     <input
-                      type="text"
+                      type="email"
                       className="w-full rounded-2xl pl-11 pr-4 py-3.5 text-sm outline-none border-2 transition-all focus:bg-white"
                       style={{ borderColor: "transparent", background: "#f2f2f2", color: t.dark }}
                       placeholder="bunda@email.com"
+                      autoComplete="email"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       onFocus={e => e.target.style.borderColor = t.active}
@@ -178,20 +184,65 @@ export function LoginScreen({ onLogin }: { onLogin: (mode: Mode) => void }) {
               </>
             )}
 
-            <button 
-              onClick={() => {
-                if (authView === "login" || authView === "register") {
-                  onLogin(loginMode);
-                } else {
-                  setAuthView("login"); // Simulation of reset sent
-                  alert("Tautan pemulihan sandi telah dikirim!");
+            <button
+              disabled={submitting}
+              onClick={async () => {
+                setError(null);
+                setSuccess(false);
+                if (!email.trim() || (authView !== "forgot" && !password)) {
+                  setError("Email dan kata sandi wajib diisi.");
+                  return;
+                }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+                  setError("Masukkan alamat email yang valid, contoh: bunda@email.com.");
+                  return;
+                }
+                if (authView === "register" && (!name.trim() || password !== confirmPassword)) {
+                  setError(!name.trim() ? "Nama wajib diisi." : "Konfirmasi kata sandi tidak cocok.");
+                  return;
+                }
+                if (authView === "register" && password.length < 6) {
+                  setError("Kata sandi minimal terdiri dari 6 karakter.");
+                  return;
+                }
+                setSubmitting(true);
+                try {
+                  if (authView === "forgot") {
+                    const result = await auth.resetPassword(email.trim());
+                    if (result.error) throw result.error;
+                    setAuthView("login");
+                    setError("Tautan pemulihan sandi telah dikirim ke email Anda.");
+                  } else {
+                    const result = await onLogin({ view: authView, mode: loginMode, email: email.trim(), password, name: name.trim() });
+                    if (authView === "register") {
+                      setAuthView("login");
+                      setPassword("");
+                      setConfirmPassword("");
+                      setSuccess(true);
+                      setError(result?.message || "Akun berhasil dibuat. Silakan masuk dengan akun Anda.");
+                    }
+                  }
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : "Autentikasi gagal.";
+                  const authStatus = typeof err === "object" && err !== null && "status" in err ? Number((err as { status?: number }).status) : 0;
+                  if (authStatus === 429 || message.toLowerCase().includes("rate limit") || message.toLowerCase().includes("too many")) {
+                    setError("Terlalu banyak percobaan pendaftaran. Tunggu sekitar 1 menit sebelum mencoba lagi.");
+                  } else {
+                    setError(message.toLowerCase().includes("invalid") || message.toLowerCase().includes("email")
+                    ? "Pendaftaran gagal. Pastikan alamat email benar dan belum terdaftar."
+                    : message);
+                  }
+                } finally {
+                  setSubmitting(false);
                 }
               }}
               className={`w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg transition-all hover:scale-[1.02] active:scale-95 ${authView === "register" ? "col-span-2 mt-4" : "mt-2"}`}
-              style={{ background: t.grad, boxShadow: `0 8px 24px ${t.shadow}` }}>
+              style={{ background: t.grad, boxShadow: `0 8px 24px ${t.shadow}`, opacity: submitting ? 0.7 : 1 }}>
               {authView === "login" ? "Masuk" : authView === "register" ? "Daftar Sekarang" : "Kirim Tautan"}
             </button>
           </div>
+
+          {error && <p className="mt-4 text-center text-xs font-semibold" style={{ color: success || error.includes("dikirim") ? "#16a34a" : "#dc2626" }}>{error}</p>}
           
           <div className="mt-6 text-center">
             {authView === "login" ? (

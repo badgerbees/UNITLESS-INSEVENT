@@ -6,26 +6,19 @@ import {
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
-import { Routes, Route, useNavigate, useLocation } from "react-router";
-import { VitalLog, EmergencyAlert, Theme, Mode, Screen, Risk, UserProfile, Vitamin, CustomSymptom } from "../types";
+import { useNavigate, useLocation } from "react-router";
+import { Theme, Mode, Screen, UserProfile } from "../types";
 import { THEMES } from "../constants/theme";
 import { Card } from "../components/Card";
 import { LoginScreen } from "../pages/LoginScreen";
-import { MotherDashboard, CompanionDashboard } from "../pages/Dashboard";
-import { HealthScreen, DEFAULT_VITAMINS } from "../pages/HealthScreen";
-import { CalendarScreen } from "../pages/CalendarScreen";
-import { ReportsScreen } from "../pages/ReportsScreen";
-import { ResourcesScreen } from "../pages/ResourcesScreen";
-import { EmergencyScreen } from "../pages/EmergencyScreen";
-import { PostpartumScreen } from "../pages/PostpartumScreen";
 import { addDays, getFruit, fmtDate } from "../utils/helpers";
 import { APP_NAME } from "../constants/brand";
-const SEED_VITALS: VitalLog[] = [
-  { id:"v1", date:"5 Nov 2024",  minggu:18, td:"116/74", bb:"62.0", fundus:"18", gerakan:"6-8",  hb:"12.1", protein:"Negatif", catatan:"" },
-  { id:"v2", date:"2 Des 2024",  minggu:22, td:"118/76", bb:"64.5", fundus:"22", gerakan:"8-10", hb:"11.9", protein:"Negatif", catatan:"Sedikit pusing pagi" },
-  { id:"v3", date:"6 Jan 2025",  minggu:27, td:"120/78", bb:"67.0", fundus:"27", gerakan:"8-10", hb:"11.5", protein:"Negatif", catatan:"" },
-  { id:"v4", date:"27 Jan 2025", minggu:31, td:"118/76", bb:"68.5", fundus:"32", gerakan:"8-10", hb:"11.8", protein:"Negatif", catatan:"" },
-];
+import { auth, type AuthForm } from "../services/auth";
+import { useAuth } from "../hooks/useAuth";
+import { api } from "../services/api";
+import { useAppData } from "./useAppData";
+import { AppRoutes } from "./AppRoutes";
+import { PregnancySetupScreen } from "../pages/PregnancySetupScreen";
 
 // ─── Shared components ────────────────────────────────────────────────────────
 
@@ -431,20 +424,9 @@ function SettingsModal({
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
 
-function loadJSON<T>(key: string, fallback: T): T {
-  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
-}
-function saveJSON(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage tidak tersedia */ }
-}
-
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("isAuthenticated") === "true");
+  const { user, loading: authLoading } = useAuth();
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("appMode") as Mode) || "mother");
-
-  useEffect(() => {
-    localStorage.setItem("isAuthenticated", String(isAuthenticated));
-  }, [isAuthenticated]);
 
   useEffect(() => {
     localStorage.setItem("appMode", mode);
@@ -459,39 +441,11 @@ export default function App() {
   const [showCustomerService, setShowCustomerService] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [alert, setAlert]       = useState<EmergencyAlert | null>(null);
-  const [vitalLogs, setVitalLogs] = useState<VitalLog[]>([]);
-  const [vitDone, setVitDone]   = useState<Record<string, boolean>>({});
-  const [symptoms, setSymptoms] = useState<Record<string, boolean>>({});
-  // Daftar vitamin & gejala tambahan yang dikustomisasi user — disimpan agar tidak hilang saat refresh
-  const [vitamins, setVitamins] = useState<Vitamin[]>(() => loadJSON("vitamins", DEFAULT_VITAMINS));
-  const [customSymptoms, setCustomSymptoms] = useState<CustomSymptom[]>(() => loadJSON("customSymptoms", []));
-  useEffect(() => { saveJSON("vitamins", vitamins); }, [vitamins]);
-  useEffect(() => { saveJSON("customSymptoms", customSymptoms); }, [customSymptoms]);
-
-  function handleAck() {
-    setAlert(prev => prev ? { ...prev, husbandAck: true } : null);
-  }
-
-  function handleSetEta(mins: number) {
-    setAlert(prev => prev ? { ...prev, husbandEta: mins } : null);
-  }
-
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    motherName: "Bunda Sari",
-    fatherName: "Ayah Ahmad",
-    email: "bunda.sari@email.com",
-    phone: "0812-3456-7890",
-    hphtDate: "2024-12-01",
-    hospital: "RSIA Bunda Jakarta",
-    doctor: "dr. Ratna, Sp.OG",
-    bloodType: "A+",
-    syncCode: "MELA-8821",
-    notifVitamin: true,
-    notifAnc: true,
-    notifEmergencySound: true,
-    notifWeeklyReport: true,
-  });
+  const {
+    hasPregnancy, alert, setAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
+    vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
+    addVital, toggleVitamin, toggleSymptom, saveVitamins, handleAck, handleSetEta,
+  } = useAppData(user);
 
   const t = THEMES[mode];
 
@@ -523,8 +477,37 @@ export default function App() {
     { id: "resources" as Screen, label: "Persiapan", Icon: Package  },
   ];
 
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={(m) => { setMode(m); setIsAuthenticated(true); }} />;
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">Memuat sesi...</div>;
+  }
+
+  if (!user) {
+    const handleLogin = async (form: AuthForm): Promise<{ message?: string }> => {
+      setMode(form.mode);
+      if (form.view === "register") {
+        const result = await auth.signUp(form.email, form.password, form.name, form.mode);
+        if (result.error) throw result.error;
+        if (result.data.session) await auth.signOut();
+        return {
+          message: result.data.session
+            ? "Akun berhasil dibuat. Silakan masuk untuk melanjutkan."
+            : "Akun berhasil dibuat. Silakan cek email Anda jika verifikasi diminta, lalu masuk.",
+        };
+      }
+      const result = await auth.signIn(form.email, form.password);
+      if (result.error) throw result.error;
+      return {};
+    };
+
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  if (hasPregnancy === null) {
+    return <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">Menyiapkan akun...</div>;
+  }
+
+  if (!hasPregnancy) {
+    return <PregnancySetupScreen t={t} mode={mode} onCreated={() => window.location.reload()} />;
   }
 
   const filteredNavItems = navItems.filter(item => 
@@ -797,7 +780,7 @@ export default function App() {
                     <button 
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        setIsAuthenticated(false);
+                        void auth.signOut();
                       }}
                       className="w-full text-left px-3 py-2 rounded-xl text-sm font-bold mt-1 transition-colors flex items-center gap-2.5" 
                       style={{ color: "#ef4444", background: "#fef2f2" }}
@@ -813,16 +796,37 @@ export default function App() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6" style={{ scrollbarWidth: "none" }}>
-          <Routes>
-            <Route path="/" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} vitamins={vitamins} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
-            <Route path="/dashboard" element={mode === "mother" ? <MotherDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} daysUntilDue={daysUntilDue} dueDate={dueDate} fruit={fruit} trimester={trimester} onEmergency={() => navigate("/emergency")} onGoHealth={() => navigate("/health")} vitDone={vitDone} vitamins={vitamins} symptoms={symptoms} motherName={userProfile.motherName} /> : <CompanionDashboard t={t} weeksPreg={weeksPreg} daysExtra={daysExtra} alert={alert} onAck={handleAck} onSetEta={handleSetEta} motherName={userProfile.motherName} />} />
-            <Route path="/health" element={<HealthScreen t={t} onEmergency={() => navigate("/emergency")} vitalLogs={vitalLogs} onAddVital={v => setVitalLogs(p => [...p, v])} vitDone={vitDone} setVitDone={setVitDone} vitamins={vitamins} setVitamins={setVitamins} symptoms={symptoms} setSymptoms={setSymptoms} customSymptoms={customSymptoms} setCustomSymptoms={setCustomSymptoms} />} />
-            <Route path="/calendar" element={<CalendarScreen t={t} dueDate={dueDate} weeksPreg={weeksPreg} daysUntilDue={daysUntilDue} trimester={trimester} />} />
-            <Route path="/reports" element={<ReportsScreen t={t} vitalLogs={vitalLogs} onAddVital={v => setVitalLogs(p => [...p, v])} weeksPreg={weeksPreg} dueDate={dueDate} />} />
-            <Route path="/resources" element={<ResourcesScreen t={t} />} />
-            <Route path="/emergency" element={<EmergencyScreen t={t} mode={mode} alert={alert} onSendAlert={a => { setAlert(a); }} onBack={() => navigate("/dashboard")} />} />
-            <Route path="/postpartum" element={<PostpartumScreen t={t} onBack={() => navigate("/dashboard")} />} />
-          </Routes>
+          <AppRoutes
+            t={t}
+            mode={mode}
+            weeksPreg={weeksPreg}
+            daysExtra={daysExtra}
+            daysUntilDue={daysUntilDue}
+            dueDate={dueDate}
+            fruit={fruit}
+            trimester={trimester}
+            motherName={userProfile.motherName}
+            alert={alert}
+            onAck={handleAck}
+            onSetEta={handleSetEta}
+            onEmergency={() => navigate("/emergency")}
+            onGoHealth={() => navigate("/health")}
+            onBack={() => navigate("/dashboard")}
+            onSendAlert={setAlert}
+            vitalLogs={vitalLogs}
+            onAddVital={addVital}
+            vitDone={vitDone}
+            setVitDone={setVitDone}
+            vitamins={vitamins}
+            setVitamins={setVitamins}
+            onSaveVitamins={saveVitamins}
+            onToggleVitamin={toggleVitamin}
+            symptoms={symptoms}
+            setSymptoms={setSymptoms}
+            onToggleSymptom={toggleSymptom}
+            customSymptoms={customSymptoms}
+            setCustomSymptoms={setCustomSymptoms}
+          />
         </div>
       </main>
 
@@ -832,7 +836,21 @@ export default function App() {
         onClose={() => setShowSettings(false)}
         t={t}
         profile={userProfile}
-        onSave={(updated) => setUserProfile(updated)}
+        onSave={(updated) => {
+          setUserProfile(updated);
+          void Promise.all([
+            api.updateMe({ full_name: mode === "mother" ? updated.motherName : updated.fatherName, phone: updated.phone }),
+            api.updatePreferences({
+              notif_vitamin: updated.notifVitamin,
+              notif_anc: updated.notifAnc,
+              notif_emergency_sound: updated.notifEmergencySound,
+              notif_weekly_report: updated.notifWeeklyReport,
+            }),
+            mode === "mother"
+              ? api.updateCurrentPregnancy({ hpht_date: updated.hphtDate, blood_type: updated.bloodType, hospital: updated.hospital, doctor: updated.doctor })
+              : Promise.resolve(null),
+          ]).catch(error => console.error("Failed to save account data", error));
+        }}
       />
       <CustomerServiceModal
         isOpen={showCustomerService}

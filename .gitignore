@@ -19,5 +19,10 @@ npm-debug.log*
 *.local
 Thumbs.db
 
+# Python backend
+backend/.venv/
+__pycache__/
+*.py[cod]
+
 # Proyek memakai pnpm (pnpm-lock.yaml)
 package-lock.json

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, CheckCheck, Zap, Navigation, Heart, Hourglass, Layers, Scale, Ruler, Pill, ClipboardList, ChevronRight, CalendarDays } from "lucide-react";
+import { Check, CheckCheck, Zap, Navigation, Heart, Hourglass, Layers, Scale, Ruler, Pill, ClipboardList, ChevronRight, CalendarDays, MapPin, PhoneCall } from "lucide-react";
 import { Theme, EmergencyAlert, Vitamin } from "../types";
 import { FruitIllustration } from "../components/FruitIllustration";
 import { OrganChip } from "../components/OrganChip";

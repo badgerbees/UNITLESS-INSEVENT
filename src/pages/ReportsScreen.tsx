@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Theme, VitalLog, EmergencyAlert, Risk, Mode } from "../types";
+import { api, ReportSummary } from "../services/api";
 import { Card } from "../components/Card";
 import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
@@ -13,6 +14,10 @@ import {
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
 
+export type SvgChartPoint = {
+  label: string;
+  [key: string]: string | number | null;
+};
 
 export function SvgLineChart({ data, series, yMin, yMax }: {
   data: SvgChartPoint[];
@@ -311,6 +316,19 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
 }) {
   const [tab, setTab] = useState<"grafik" | "input" | "history" | "analisis">("grafik");
   const [showPdf, setShowPdf] = useState(false);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api.getReportSummary()
+      .then(summary => {
+        if (active) setReportSummary(summary);
+      })
+      .catch(() => {
+        if (active) setReportSummary(null);
+      });
+    return () => { active = false; };
+  }, [vitalLogs.length]);
 
   const [form, setForm] = useState({ td:"", bb:"", fundus:"", gerakan:"", hb:"", protein:"Negatif" as VitalLog["protein"], catatan:"" });
   function setF(k: keyof typeof form, v: string) { setForm(p => ({ ...p, [k]: v })); }
@@ -406,6 +424,22 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
               ) : (
                 <div className="rounded-2xl p-5 text-center" style={{ background: t.soft }}>
                   <p className="text-sm" style={{ color: t.muted }}>Belum ada data vital. Gunakan tab "+ Catat Vital" untuk mulai.</p>
+                </div>
+              )}
+
+              {reportSummary && reportSummary.total_vitals > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: "Catatan tersimpan", value: `${reportSummary.total_vitals}` },
+                    { label: "Rata-rata berat", value: reportSummary.average_weight !== null ? `${reportSummary.average_weight} kg` : "-" },
+                    { label: "Rata-rata Hb", value: reportSummary.average_hemoglobin !== null ? `${reportSummary.average_hemoglobin} g/dL` : "-" },
+                    { label: "Protein positif", value: `${reportSummary.protein_flags}` },
+                  ].map(item => (
+                    <div key={item.label} className="rounded-2xl p-3" style={{ background: t.card, border: `1px solid ${t.border}` }}>
+                      <p className="text-[10px] font-semibold" style={{ color: t.muted }}>{item.label}</p>
+                      <p className="text-base font-extrabold mt-1" style={{ color: t.dark }}>{item.value}</p>
+                    </div>
+                  ))}
                 </div>
               )}
 

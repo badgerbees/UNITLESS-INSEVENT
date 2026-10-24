@@ -14,15 +14,60 @@ import {
 } from "lucide-react";
 
 
-export function EmergencyScreen({ t, mode, alert, onSendAlert, onBack }: {
-  t: Theme; mode: Mode; onBack: () => void;
+export type SendAlertPayload = { message: string; location: string | null; lat: number | null; lng: number | null };
+
+type GeoState = { status: "loading" } | { status: "ok"; lat: number; lng: number } | { status: "unavailable" };
+
+function useGeolocation(enabled: boolean): GeoState {
+  const [geo, setGeo] = useState<GeoState>({ status: "loading" });
+  useEffect(() => {
+    if (!enabled) return;
+    if (!("geolocation" in navigator)) { setGeo({ status: "unavailable" }); return; }
+    const watch = navigator.geolocation.watchPosition(
+      pos => setGeo({ status: "ok", lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => setGeo({ status: "unavailable" }),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 },
+    );
+    return () => navigator.geolocation.clearWatch(watch);
+  }, [enabled]);
+  return geo;
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const r = (d: number) => (d * Math.PI) / 180;
+  const a = Math.sin(r(lat2 - lat1) / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(r(lng2 - lng1) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(a));
+}
+
+function useSecondsSince(date: Date | undefined) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!date) return;
+    const tick = () => setSeconds(Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [date?.getTime()]);
+  return seconds;
+}
+
+export type EmergencyContacts = { hospital: string; doctor: string; motherName: string; fatherName: string; motherPhone: string; fatherPhone: string };
+
+export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve, onBack, contacts }: {
+  t: Theme; mode: Mode; onBack: () => void; contacts: EmergencyContacts;
   alert: EmergencyAlert | null;
-  onSendAlert: (a: EmergencyAlert) => void;
+  onSendAlert: (payload: SendAlertPayload) => Promise<boolean>;
+  onAck: (etaMinutes: number) => void;
+  onResolve: () => Promise<void>;
 }) {
   const [sending, setSending]   = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [companionNotified, setCompanionNotified] = useState(true);
   const [msgIdx, setMsgIdx]     = useState(0);
   const [customMsg, setCustomMsg] = useState("");
-  const [secondsAgo, setSecondsAgo] = useState(0);
+  const secondsAgo = useSecondsSince(alert?.sentAt);
+  const geo = useGeolocation(true);
 
   const messages = [
     "DARURAT: Saya butuh bantuan sekarang!",
@@ -31,75 +76,73 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onBack }: {
     "Pesan Kustom"
   ];
 
-  useEffect(() => {
-    if (!alert) return;
-    const id = setInterval(() => setSecondsAgo(s => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [alert]);
-
-  function handleSend() {
+  async function handleSend() {
     if (msgIdx === 3 && !customMsg.trim()) return; // Prevent empty custom messages
     setSending(true);
-    setTimeout(() => {
-      onSendAlert({
-        sentAt: new Date(),
-        trigger: "manual",
-        location: "Jl. Kemang Raya No. 45, Jakarta Selatan",
-        lat: -6.2607,
-        lng: 106.8163,
-        contractions: "5 mnt · 60 dtk · 3 kali",
+    setSendError(null);
+    try {
+      const coords = geo.status === "ok" ? { lat: geo.lat, lng: geo.lng } : { lat: null, lng: null };
+      const notified = await onSendAlert({
         message: msgIdx === 3 ? customMsg.trim() : messages[msgIdx],
-        husbandAck: false,
-        husbandEta: null,
+        location: coords.lat != null ? `GPS ${coords.lat.toFixed(5)}, ${coords.lng!.toFixed(5)}` : null,
+        ...coords,
       });
+      setCompanionNotified(notified);
+    } catch {
+      setSendError("Gagal mengirim. Periksa koneksi internet lalu coba lagi, atau langsung telepon 119.");
+    } finally {
       setSending(false);
-    }, 1800);
+    }
   }
 
+  async function handleResolve() {
+    setResolving(true);
+    try { await onResolve(); } catch { setSendError("Gagal menandai selesai. Coba lagi."); }
+    finally { setResolving(false); }
+  }
+
+  // Tautan Google Maps sungguhan (bukan daftar RS contoh): RS rujukan dari profil & pencarian IGD di sekitar lokasi GPS
+  const mapsSearch = (query: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  const nearbyIgdUrl = geo.status === "ok"
+    ? `https://www.google.com/maps/search/rumah+sakit+IGD/@${geo.lat},${geo.lng},14z`
+    : mapsSearch("rumah sakit IGD terdekat");
+  const partner = mode === "mother"
+    ? { label: "Telepon Suami", name: contacts.fatherName, phone: contacts.fatherPhone }
+    : { label: "Telepon Bunda", name: contacts.motherName, phone: contacts.motherPhone };
+  const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, "")}`;
+
   return (
-    <div className="space-y-5 w-full">
-      {/* Header */}
-      <div className="rounded-3xl p-6 text-center" style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
-        <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center bg-white/20">
-          <PhoneCall size={26} className="text-white" />
+    <div className="space-y-4 w-full">
+      {/* Spanduk darurat ringkas: identitas halaman jelas tanpa mendorong aksi utama ke bawah */}
+      <div className="rounded-3xl px-6 py-5 flex items-center gap-4" style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)", boxShadow: "0 8px 24px rgba(220,38,38,0.25)" }}>
+        <div className="relative w-12 h-12 flex-shrink-0">
+          <span className="absolute inset-0 rounded-full bg-white/30 animate-ping motion-reduce:animate-none" />
+          <span className="relative w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+            <AlertTriangle size={22} className="text-white" />
+          </span>
         </div>
-        <p className="text-2xl font-extrabold text-white">Mode Darurat</p>
-        <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.7)" }}>Hubungi bantuan & beritahu suami posisi Anda</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-2xl font-extrabold text-white leading-tight">Mode Darurat</p>
+          <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>
+            {mode === "mother" ? "Beritahu suami posisi Bunda, atau langsung hubungi bantuan." : "Pantau kondisi Bunda dan hubungi bantuan bila perlu."}
+          </p>
+        </div>
+        {/* Status siaga saat ini */}
+        <div className="flex items-center gap-2 rounded-full px-4 py-2 flex-shrink-0" style={{ background: "rgba(255,255,255,0.18)" }}>
+          <span className={`w-2 h-2 rounded-full ${alert ? "bg-white animate-pulse" : "bg-white/60"}`} />
+          <span className="text-xs font-bold text-white">
+            {!alert ? (mode === "mother" ? "Siaga · belum ada notifikasi terkirim" : "Siaga · tidak ada panggilan darurat")
+              : alert.husbandAck ? `Suami sedang menuju${alert.husbandEta ? ` · ~${alert.husbandEta} mnt` : ""}`
+              : mode === "mother" ? "Notifikasi terkirim · menunggu konfirmasi suami" : "Bunda memanggil · segera konfirmasi"}
+          </span>
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Call & Hospital */}
-        <div className="grid grid-cols-4 gap-4">
-          <a href="tel:119" className="col-span-1 flex flex-col items-center justify-center gap-3 rounded-3xl p-4 text-center transition-all hover:scale-[1.02]" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5" }}>
-            <div className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-              <PhoneCall size={24} className="text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold text-red-700 leading-tight">Panggil<br/>Ambulans</p>
-              <p className="text-[10px] font-semibold text-red-500 mt-1">119 — IGD</p>
-            </div>
-          </a>
-          <Card t={t} className="col-span-3 p-5 flex flex-col">
-            <p className="text-xs font-bold mb-3 uppercase tracking-wide flex-shrink-0" style={{ color: "#ef4444" }}>RS Terdekat</p>
-            <div className="flex-1 grid grid-cols-3 gap-3">
-              {[
-                { name: "RSIA Bunda",      dist: "2.3 km", time: "~8 mnt"  },
-                { name: "RS Ibu Permata",  dist: "4.1 km", time: "~12 mnt" },
-                { name: "RSUP Nasional",   dist: "5.8 km", time: "~18 mnt" },
-              ].map(rs => (
-                <div key={rs.name} className="flex flex-col rounded-xl p-3" style={{ background: t.soft }}>
-                  <p className="text-[13px] font-bold leading-tight" style={{ color: t.dark }}>{rs.name}</p>
-                  <p className="text-[11px] mb-3 mt-0.5" style={{ color: t.muted }}>{rs.dist} · {rs.time}</p>
-                  <button className="mt-auto text-[11px] font-bold py-1.5 rounded-lg text-white transition-all w-full" style={{ background: "#ef4444" }}>Navigasi</button>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Right panels */}
-        {mode === "mother" && (
-          <Card t={t} className="p-6">
+      <div className="grid grid-cols-3 gap-4 items-start">
+        {/* Kiri (2/3): aksi utama */}
+        <div className="col-span-2">
+          {mode === "mother" ? (
+          <Card t={t} className="p-6" style={{ border: "1.5px solid #fecaca", borderTop: "4px solid #ef4444" }}>
             <div className="flex items-center gap-2 mb-4">
               <Send size={16} color="#ef4444" />
               <p className="text-sm font-extrabold" style={{ color: t.dark }}>Kirim Notifikasi Darurat ke Suami</p>
@@ -107,56 +150,54 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onBack }: {
 
             {!alert ? (
               <>
-                {/* Location preview */}
-                <div className="rounded-2xl p-3 mb-4 flex items-center gap-3" style={{ background: t.soft }}>
+                <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: t.soft }}>
                   <MapPin size={16} color={t.active} className="flex-shrink-0" />
                   <div>
                     <p className="text-xs font-bold" style={{ color: t.dark }}>Lokasi saat ini (GPS)</p>
-                    <p className="text-[11px]" style={{ color: t.muted }}>Jl. Kemang Raya No. 45, Jakarta Selatan</p>
-                    <p className="text-[10px]" style={{ color: t.muted }}>-6.2607, 106.8163 · Diperbarui barusan</p>
+                    <p className="text-[11px]" style={{ color: t.muted }}>
+                      {geo.status === "ok" ? `${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)} · akan dikirim bersama pesan`
+                        : geo.status === "loading" ? "Mencari lokasi…"
+                        : "Lokasi tidak tersedia — izinkan akses lokasi di browser. Pesan tetap bisa dikirim."}
+                    </p>
                   </div>
                 </div>
 
-                {/* Message selector */}
-                <p className="text-sm font-extrabold mb-3 mt-1" style={{ color: t.dark }}>Pilih atau Ketik Pesan:</p>
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  {messages.map((m, i) => (
-                    <React.Fragment key={i}>
-                      <button onClick={() => setMsgIdx(i)}
-                        className={`w-full text-left rounded-xl px-4 py-3 text-[13px] transition-all ${i === 3 ? "col-span-2" : ""}`}
-                        style={{
-                          background: msgIdx === i ? t.soft : "#f8f8f8",
-                          border: `1.5px solid ${msgIdx === i ? t.active : "transparent"}`,
-                          color: msgIdx === i ? t.active : t.muted,
-                          fontWeight: msgIdx === i ? 700 : 500,
-                        }}>
-                        {m}
-                      </button>
-                      {msgIdx === 3 && i === 3 && (
-                        <div className="col-span-2">
+                {/* Pilihan pesan: daftar satu kolom bergaya radio */}
+                <p className="text-xs font-bold mb-2" style={{ color: t.dark }}>Pesan</p>
+                <div className="space-y-2 mb-5" role="radiogroup" aria-label="Pilih pesan darurat">
+                  {messages.map((m, i) => {
+                    const on = msgIdx === i;
+                    return (
+                      <div key={i}>
+                        <button role="radio" aria-checked={on} onClick={() => setMsgIdx(i)}
+                          className="w-full flex items-center gap-3 text-left rounded-xl px-4 py-3 text-[13px]"
+                          style={{ background: on ? "#fef2f2" : "#f8f8f8", border: `1.5px solid ${on ? "#ef4444" : "transparent"}`, color: on ? "#b91c1c" : t.dark, fontWeight: on ? 700 : 500 }}>
+                          <span className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center" style={{ border: `2px solid ${on ? "#ef4444" : "#d1d5db"}` }}>
+                            {on && <span className="w-2 h-2 rounded-full bg-red-500" />}
+                          </span>
+                          {i === 3 ? "Tulis pesan sendiri…" : m}
+                        </button>
+                        {i === 3 && on && (
                           <textarea
-                            className="w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-all resize-none mt-1"
-                            style={{ borderColor: t.active, background: t.card, color: t.dark }}
-                            placeholder="Tulis pesan darurat Anda di sini..."
-                            rows={2}
-                            value={customMsg}
-                            onChange={e => setCustomMsg(e.target.value)}
-                            autoFocus
-                          />
-                        </div>
-                      )}
-                    </React.Fragment>
-                  ))}
+                            className="w-full rounded-xl px-4 py-3 text-sm outline-none border-2 resize-none mt-2"
+                            style={{ borderColor: "#fca5a5", background: t.card, color: t.dark }}
+                            placeholder="Tulis pesan darurat Bunda di sini…" rows={2} maxLength={500}
+                            value={customMsg} onChange={e => setCustomMsg(e.target.value)} autoFocus />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <button onClick={handleSend} disabled={sending || (msgIdx === 3 && !customMsg.trim())}
-                  className="w-full py-3.5 rounded-2xl font-extrabold text-white flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                  style={{ background: sending ? "#f87171" : "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
+                  className="ui-interactive w-full py-4 rounded-2xl font-extrabold text-white text-base flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: sending ? "#f87171" : "linear-gradient(135deg,#ef4444,#b91c1c)", boxShadow: "0 6px 18px rgba(239,68,68,0.3)" }}>
                   {sending
-                    ? <><RefreshCw size={16} className="animate-spin" /> Mengirim…</>
-                    : <><Send size={16} /> Kirim Notifikasi + Bagikan Lokasi</>
+                    ? <><RefreshCw size={18} className="animate-spin" /> Mengirim…</>
+                    : <><Send size={18} /> Kirim Notifikasi + Bagikan Lokasi</>
                   }
                 </button>
+                {sendError && <p className="text-xs text-red-600 mt-2 text-center">{sendError}</p>}
               </>
             ) : (
               /* Sent state */
@@ -183,6 +224,11 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onBack }: {
                       <MapPin size={12} color={t.active} />
                       <p className="text-xs" style={{ color: t.muted }}>{alert.location}</p>
                     </div>
+                    {!companionNotified && (
+                      <p className="text-[11px] font-semibold text-amber-600">
+                        Akun suami belum tersambung — bagikan kode sinkronisasi di Pengaturan agar suami menerima notifikasi.
+                      </p>
+                    )}
                     <div className="flex items-center gap-2">
                       <Clock size={12} color={t.muted} />
                       <p className="text-xs" style={{ color: t.muted }}>
@@ -205,33 +251,101 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onBack }: {
                   )}
                 </div>
 
-                <button onClick={handleSend}
-                  className="w-full py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5"
-                  style={{ borderColor: "#fca5a5", color: "#ef4444", background: "#fff" }}>
-                  <RefreshCw size={12} /> Kirim Ulang
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={handleSend} disabled={sending}
+                    className="ui-interactive w-full py-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    style={{ borderColor: "#fca5a5", color: "#ef4444", background: "#fff" }}>
+                    <RefreshCw size={12} className={sending ? "animate-spin" : ""} /> Kirim Ulang
+                  </button>
+                  <button onClick={handleResolve} disabled={resolving}
+                    className="ui-interactive w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 text-white disabled:opacity-50"
+                    style={{ background: "#22c55e" }}>
+                    <Check size={12} /> Kondisi Sudah Aman
+                  </button>
+                </div>
+                {sendError && <p className="text-xs text-red-600 text-center">{sendError}</p>}
               </div>
             )}
           </Card>
-        )}
+          ) : (
+            <CompanionEmergencyPanel t={t} alert={alert} onAck={onAck} geo={geo} />
+          )}
+        </div>
 
-        {/* Companion emergency panel */}
-        {mode === "companion" && <CompanionEmergencyPanel t={t} alert={alert} />}
+        {/* Kanan (1/3): panggilan cepat */}
+        <Card t={t} className="p-5" style={{ border: "1.5px solid #fecaca" }}>
+          <p className="text-xs font-bold uppercase tracking-wide mb-3 text-red-500">Panggilan Cepat</p>
+          <div className="space-y-2">
+            <a href="tel:119" className="ui-interactive flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#fef2f2", border: "1.5px solid #fca5a5" }}>
+              <span className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0"><PhoneCall size={18} className="text-white" /></span>
+              <span>
+                <span className="block text-sm font-extrabold text-red-700">Ambulans</span>
+                <span className="block text-[11px] font-semibold text-red-500">119 · gawat darurat</span>
+              </span>
+            </a>
+            {partner.phone ? (
+              <a href={telHref(partner.phone)} className="ui-interactive flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: t.soft }}>
+                <span className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: t.active }}><Smartphone size={18} className="text-white" /></span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-extrabold" style={{ color: t.dark }}>{partner.label}</span>
+                  <span className="block text-[11px] truncate" style={{ color: t.muted }}>{partner.name ? `${partner.name} · ` : ""}{partner.phone}</span>
+                </span>
+              </a>
+            ) : (
+              <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#f8f8f8" }}>
+                <span className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-200"><Smartphone size={18} className="text-gray-400" /></span>
+                <span>
+                  <span className="block text-sm font-bold text-gray-400">{partner.label}</span>
+                  <span className="block text-[11px] text-gray-400">Nomor HP belum ada di profil</span>
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] mt-3 leading-relaxed" style={{ color: t.muted }}>Di komputer, tombol telepon membuka aplikasi panggilan bila tersedia.</p>
+        </Card>
       </div>
+
+      {/* Fasilitas kesehatan: data asli dari profil + pencarian di Google Maps */}
+      <Card t={t} className="p-5" style={{ border: "1.5px solid #fecaca" }}>
+        <p className="text-xs font-bold uppercase tracking-wide mb-3 text-red-500">Fasilitas Kesehatan</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: t.soft }}>
+            <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0"><Heart size={18} color={t.active} /></span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px]" style={{ color: t.muted }}>RS / klinik rujukan Bunda</p>
+              <p className="text-sm font-extrabold truncate" style={{ color: contacts.hospital ? t.dark : t.muted }}>
+                {contacts.hospital || "Belum diisi — tambahkan di Pengaturan"}
+              </p>
+              {contacts.doctor && <p className="text-[11px] truncate" style={{ color: t.muted }}>{contacts.doctor}</p>}
+            </div>
+            {contacts.hospital && (
+              <a href={mapsSearch(contacts.hospital)} target="_blank" rel="noreferrer"
+                className="ui-interactive flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full text-white flex-shrink-0" style={{ background: t.active }}>
+                <Navigation size={12} /> Navigasi
+              </a>
+            )}
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: t.soft }}>
+            <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0"><Search size={18} color={t.active} /></span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px]" style={{ color: t.muted }}>Tidak sempat ke RS rujukan?</p>
+              <p className="text-sm font-extrabold" style={{ color: t.dark }}>Cari IGD terdekat</p>
+              <p className="text-[11px]" style={{ color: t.muted }}>{geo.status === "ok" ? "Dari lokasi Bunda saat ini" : "Lokasi belum tersedia — Maps akan memakai lokasi perangkat"}</p>
+            </div>
+            <a href={nearbyIgdUrl} target="_blank" rel="noreferrer"
+              className="ui-interactive flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full text-white flex-shrink-0" style={{ background: t.active }}>
+              <MapPin size={12} /> Buka Maps
+            </a>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
 
-export function CompanionEmergencyPanel({ t, alert }: { t: Theme; alert: EmergencyAlert | null }) {
+export function CompanionEmergencyPanel({ t, alert, onAck, geo }: { t: Theme; alert: EmergencyAlert | null; onAck: (etaMinutes: number) => void; geo: GeoState }) {
   const [checks, setChecks] = useState<Record<string, boolean>>({});
-  const [called, setCalled] = useState<Record<string, boolean>>({});
-  const [secondsAgo, setSecondsAgo] = useState(0);
-
-  useEffect(() => {
-    if (!alert) return;
-    const id = setInterval(() => setSecondsAgo(s => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [alert]);
+  const secondsAgo = useSecondsSince(alert?.sentAt);
 
   const checklistItems = [
     { id: "car",   label: "Kendaraan siap & BBM penuh"       },
@@ -244,11 +358,9 @@ export function CompanionEmergencyPanel({ t, alert }: { t: Theme; alert: Emergen
 
   const donePct = Math.round((Object.values(checks).filter(Boolean).length / checklistItems.length) * 100);
 
-  const contacts = [
-    { name: "Bunda Sari",     role: "Istri",           phone: "+62-812-xxxx-xxxx", color: "#ef4444" },
-    { name: "dr. Ratna Sp.OG", role: "Dokter Kandungan", phone: "+62-811-xxxx-xxxx", color: t.active  },
-    { name: "RSIA Bunda",     role: "RS Rujukan",       phone: "+62-21-xxxx-xxxx",  color: "#f59e0b" },
-  ];
+  // Jarak garis lurus suami → Bunda dari dua titik GPS asli (null bila salah satu tidak tersedia)
+  const distanceKm = alert?.lat != null && alert?.lng != null && geo.status === "ok"
+    ? haversineKm(geo.lat, geo.lng, alert.lat, alert.lng) : null;
 
   return (
     <div className="col-span-2 grid grid-cols-2 gap-4">
@@ -269,42 +381,58 @@ export function CompanionEmergencyPanel({ t, alert }: { t: Theme; alert: Emergen
               </p>
             </div>
 
+            {alert.husbandAck ? (
+              <div className="rounded-xl p-3 flex items-center gap-2" style={{ background: "#f0fdf4", border: "1.5px solid #86efac" }}>
+                <CheckCheck size={14} className="text-green-600" />
+                <p className="text-xs font-bold text-green-700">
+                  Sudah dikonfirmasi{alert.husbandEta != null ? ` · tiba ~${alert.husbandEta} mnt` : ""}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-[11px] font-bold mb-1.5" style={{ color: t.dark }}>Konfirmasi ke Bunda — perkiraan tiba:</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[5, 10, 15].map(eta => (
+                    <button key={eta} onClick={() => onAck(eta)}
+                      className="ui-interactive py-2 rounded-xl text-xs font-bold text-white"
+                      style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
+                      ~{eta} mnt
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="rounded-xl p-3 flex items-start gap-2" style={{ background: t.soft }}>
               <MapPin size={13} color={t.active} className="flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold" style={{ color: t.dark }}>Lokasi Bunda</p>
                 <p className="text-[11px]" style={{ color: t.muted }}>{alert.location}</p>
-                <p className="text-[10px]" style={{ color: t.muted }}>{alert.lat}, {alert.lng}</p>
+                {alert.lat != null && alert.lng != null && (
+                  <a href={`https://www.google.com/maps/search/?api=1&query=${alert.lat},${alert.lng}`} target="_blank" rel="noreferrer"
+                    className="text-[11px] font-bold underline" style={{ color: t.active }}>
+                    Buka di Google Maps
+                  </a>
+                )}
               </div>
             </div>
 
-            {/* Mini map */}
-            <div className="rounded-xl overflow-hidden" style={{ height: 110, background: "#e8f4e8" }}>
-              <svg width="100%" height="100%" viewBox="0 0 260 110">
-                {[25,50,75,100,125,150,175,200,225].map(x=><line key={x} x1={x} y1={0} x2={x} y2={110} stroke="#c8e6c8" strokeWidth={1}/>)}
-                {[25,50,75,100].map(y=><line key={y} x1={0} y1={y} x2={260} y2={y} stroke="#c8e6c8" strokeWidth={1}/>)}
-                <path d="M 0 58 Q 130 48 260 58" stroke="#d4d4d4" strokeWidth={5} fill="none"/>
-                <path d="M 110 0 L 110 110" stroke="#d4d4d4" strokeWidth={5}/>
-                <circle cx={130} cy={55} r={14} fill="rgba(239,68,68,0.15)"/>
-                <circle cx={130} cy={55} r={8} fill="rgba(239,68,68,0.3)"/>
-                <circle cx={130} cy={55} r={5} fill="#ef4444"/>
-                <circle cx={55} cy={78} r={5} fill={t.active}/>
-                <path d="M 55 78 Q 90 66 130 55" stroke={t.active} strokeWidth={2} strokeDasharray="4 3" fill="none"/>
-                <text x={138} y={50} fontSize={8} fill="#ef4444" fontWeight="bold">Bunda</text>
-                <text x={35} y={90} fontSize={8} fill={t.active} fontWeight="bold">Ayah</text>
-              </svg>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl p-2.5 text-center" style={{ background: t.soft }}>
-                <p className="text-[10px]" style={{ color: t.muted }}>Jarak</p>
-                <p className="text-sm font-extrabold" style={{ color: t.dark }}>2.3 km</p>
+            {alert.lat != null && alert.lng != null && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl p-2.5 text-center" style={{ background: t.soft }}>
+                  <p className="text-[10px]" style={{ color: t.muted }}>Jarak (garis lurus)</p>
+                  <p className="text-sm font-extrabold" style={{ color: t.dark }}>
+                    {distanceKm != null ? `${distanceKm < 1 ? (distanceKm * 1000).toFixed(0) + " m" : distanceKm.toFixed(1) + " km"}` : "—"}
+                  </p>
+                  {distanceKm == null && <p className="text-[9px]" style={{ color: t.muted }}>Izinkan akses lokasi</p>}
+                </div>
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${alert.lat},${alert.lng}`} target="_blank" rel="noreferrer"
+                  className="ui-interactive rounded-xl p-2.5 flex flex-col items-center justify-center text-white" style={{ background: t.active }}>
+                  <Navigation size={16} />
+                  <span className="text-xs font-bold mt-1">Petunjuk arah</span>
+                </a>
               </div>
-              <div className="rounded-xl p-2.5 text-center" style={{ background: t.soft }}>
-                <p className="text-[10px]" style={{ color: t.muted }}>ETA</p>
-                <p className="text-sm font-extrabold" style={{ color: t.dark }}>~8 mnt</p>
-              </div>
-            </div>
+            )}
           </div>
         ) : (
           <div className="rounded-2xl p-6 text-center" style={{ background: "#f0fdf4", border: "1.5px solid #86efac" }}>
@@ -317,30 +445,6 @@ export function CompanionEmergencyPanel({ t, alert }: { t: Theme; alert: Emergen
 
       {/* Checklist & Contacts */}
       <div className="space-y-4">
-        {/* Quick contacts */}
-        <Card t={t} className="p-4">
-          <p className="text-xs font-extrabold mb-3 uppercase tracking-wide" style={{ color: t.dark }}>Kontak Cepat</p>
-          <div className="space-y-2">
-            {contacts.map(c => (
-              <div key={c.name} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: t.soft }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-                  style={{ background: c.color }}>
-                  {c.name[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate" style={{ color: t.dark }}>{c.name}</p>
-                  <p className="text-[10px]" style={{ color: t.muted }}>{c.role}</p>
-                </div>
-                <button onClick={() => setCalled(p => ({ ...p, [c.name]: true }))}
-                  className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full text-white flex-shrink-0"
-                  style={{ background: called[c.name] ? "#22c55e" : c.color }}>
-                  {called[c.name] ? <><Check size={10}/> Terhubung</> : <><PhoneCall size={10}/> Hubungi</>}
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-
         {/* Action checklist */}
         <Card t={t} className="p-4">
           <div className="flex items-center justify-between mb-3">
@@ -353,7 +457,7 @@ export function CompanionEmergencyPanel({ t, alert }: { t: Theme; alert: Emergen
           <div className="space-y-1.5">
             {checklistItems.map(item => (
               <button key={item.id} onClick={() => setChecks(p => ({ ...p, [item.id]: !p[item.id] }))}
-                className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-all"
+                className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-left"
                 style={{ background: checks[item.id] ? "#f0fdf4" : t.soft }}>
                 <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
                   style={{ background: checks[item.id] ? "#22c55e" : t.border }}>

@@ -5,12 +5,16 @@ import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
 import { StatTile } from "../components/StatTile";
 import { fmtDate, addDays } from "../utils/helpers";
+import { KICK_MAX_MS, type Trackers } from "../hooks/useTrackers";
+import { SessionHistoryModal, type HistoryTab } from "../components/SessionHistoryModal";
+import { VitalEntryForm } from "../components/VitalEntryForm";
+import { VitalDangerAlert } from "../components/VitalDangerAlert";
 import {
   Home, Activity, Calendar, FileText, Package, Bell,
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
   PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
-  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, Pencil, Trash2
+  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, Pencil, Trash2, RotateCcw
 } from "lucide-react";
 
 
@@ -61,11 +65,16 @@ export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, se
         <div className="flex items-center gap-3">
           {!editing && <span className="text-xs font-bold" style={{ color: allDone ? "#22c55e" : t.active }}>{pct}%</span>}
           {editing ? (
-            <button onClick={saveEdit} className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full text-white" style={{ background: t.active }}>
-              <Check size={13} /> Simpan
-            </button>
+            <>
+              <button onClick={() => setEditing(false)} className="ui-interactive text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: t.muted }}>
+                Batal
+              </button>
+              <button onClick={saveEdit} className="ui-interactive flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full text-white" style={{ background: t.active }}>
+                <Check size={13} /> Simpan
+              </button>
+            </>
           ) : (
-            <button onClick={startEdit} className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.active }}>
+            <button onClick={startEdit} className="ui-interactive flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.active }}>
               <Pencil size={12} /> Edit
             </button>
           )}
@@ -95,12 +104,11 @@ export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, se
             style={{ border: `1.5px dashed ${t.primary}`, color: t.active }}>
             <Plus size={14} /> Tambah vitamin
           </button>
-          <div className="flex items-center justify-between mt-1">
-            <button onClick={() => setDraft(DEFAULT_VITAMINS.map(v => ({ ...v })))} className="text-[11px] font-semibold underline" style={{ color: t.muted }}>
-              Kembalikan ke default
-            </button>
-            <button onClick={() => setEditing(false)} className="text-[11px] font-semibold" style={{ color: t.muted }}>Batal</button>
-          </div>
+          {/* Hanya mengganti draf; baru tersimpan saat Simpan, dan bisa dibatalkan dengan Batal */}
+          <button onClick={() => setDraft(DEFAULT_VITAMINS.map(v => ({ ...v })))}
+            className="self-start flex items-center gap-1.5 mt-1 text-[11px] font-semibold transition-colors hover:opacity-80" style={{ color: t.muted }}>
+            <RotateCcw size={12} /> Kembalikan ke default
+          </button>
         </div>
       ) : (
         <>
@@ -114,12 +122,13 @@ export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, se
               <button onClick={startEdit} className="mt-2 text-xs font-bold" style={{ color: t.active }}>+ Tambah vitamin</button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 flex-1">
+            // Daftar satu kolom: tiap vitamin satu baris dengan tinggi tetap, berapa pun jumlahnya
+            <div className="flex flex-col gap-2">
               {vitamins.map(v => (
                 <button key={v.id} onClick={() => onToggleVitamin(v.id, !done[v.id])}
-                  className="flex items-center gap-3 rounded-xl px-3 py-3 transition-all text-left w-full"
+                  className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-left w-full transition-colors duration-150 motion-reduce:transition-none"
                   style={{ background: done[v.id] ? "#f0fdf4" : t.soft, border: `1.5px solid ${done[v.id] ? "#22c55e40" : "transparent"}` }}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-150 motion-reduce:transition-none"
                     style={{ background: done[v.id] ? "#22c55e" : v.color }}>
                     {done[v.id]
                       ? <Check size={16} className="text-white" />
@@ -127,18 +136,25 @@ export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, se
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate" style={{ color: done[v.id] ? "#166534" : t.dark }}>{v.label}</p>
-                    {v.dose && <p className="text-[10px]" style={{ color: t.muted }}>{v.dose}</p>}
+                    <p className="text-sm font-semibold truncate" style={{ color: done[v.id] ? "#166534" : t.dark }}>{v.label}</p>
+                    {v.dose && <p className="text-[11px]" style={{ color: t.muted }}>{v.dose}</p>}
                   </div>
-                  {done[v.id] && <CheckCheck size={13} className="text-green-500 flex-shrink-0" />}
+                  <span className="text-[11px] font-bold flex-shrink-0 transition-colors duration-150 motion-reduce:transition-none"
+                    style={{ color: done[v.id] ? "#16a34a" : t.muted }}>
+                    {done[v.id] ? "Sudah diminum" : "Belum"}
+                  </span>
                 </button>
               ))}
             </div>
           )}
-          {allDone && (
+          {allDone ? (
             <div className="mt-3 rounded-xl py-2.5 text-center" style={{ background: "#f0fdf4" }}>
               <p className="text-sm text-green-600 font-bold">Semua vitamin sudah diminum hari ini</p>
             </div>
+          ) : vitamins.length > 0 && (
+            <p className="mt-auto pt-3 text-[11px] text-center" style={{ color: t.muted }}>
+              {vitamins.length - doneCount} vitamin lagi untuk hari ini · ketuk untuk menandai sudah diminum
+            </p>
           )}
         </>
       )}
@@ -146,9 +162,9 @@ export function VitaminTracker({ t, done, setDone, onToggleVitamin, vitamins, se
   );
 }
 
-export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, onToggleVitamin, vitamins, setVitamins, onSaveVitamins, symptoms, setSymptoms, onToggleSymptom, customSymptoms, setCustomSymptoms }: {
-  t: Theme; onEmergency: () => void;
-  vitalLogs: VitalLog[]; onAddVital: (v: VitalLog) => void;
+export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, setVitDone, onToggleVitamin, vitamins, setVitamins, onSaveVitamins, symptoms, setSymptoms, onToggleSymptom, customSymptoms, setCustomSymptoms, trackers, weeksPreg }: {
+  t: Theme; onEmergency: () => void; weeksPreg: number;
+  vitalLogs: VitalLog[]; onAddVital: (v: VitalLog) => Promise<void>;
   vitDone: Record<string, boolean>; setVitDone: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onToggleVitamin: (id: string, completed: boolean) => void;
   vitamins: Vitamin[]; setVitamins: React.Dispatch<React.SetStateAction<Vitamin[]>>;
@@ -156,32 +172,46 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
   symptoms: Record<string, boolean>; setSymptoms: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onToggleSymptom: (id: string, active: boolean, label: string, risk: Risk) => void;
   customSymptoms: CustomSymptom[]; setCustomSymptoms: React.Dispatch<React.SetStateAction<CustomSymptom[]>>;
+  trackers: Trackers;
 }) {
   const [newSym, setNewSym] = useState("");
-  const [kick, setKick]               = useState(0);
-  const [kickActive, setKickActive]   = useState(false);
-  const [kickSecs, setKickSecs]       = useState(0);
-  const [kickStartAt, setKickStartAt] = useState<number | null>(null);
-  const [contrActive, setContrActive] = useState(false);
-  const [contrStart, setContrStart]   = useState<number | null>(null);
-  const [lastEnd, setLastEnd]         = useState<number | null>(null);
-  const [elapsed, setElapsed]         = useState(0);
-  const [contractions, setContractions] = useState<{ dur: number; gap: number }[]>([]);
+  const [historyTab, setHistoryTab] = useState<HistoryTab | null>(null);
+  // Kontraksi & kick counter dikelola di level aplikasi (useTrackers) agar tetap berjalan saat pindah halaman
+  const { contraction, kick: kickTracker } = trackers;
+  const contrActive = contraction.active;
+  const elapsed = contraction.elapsedSecs;
+  const contractions = contraction.contractions;
+  const toggleContr = contraction.toggle;
+  const kick = kickTracker.count;
+  const kickActive = kickTracker.active;
+  const kickSecs = kickTracker.elapsedSecs;
+  const startKickSession = kickTracker.start;
+  const addKick = kickTracker.add;
   const [showVitalForm, setShowVitalForm] = useState(false);
-  const [vForm, setVForm] = useState({ td:"", bb:"", fundus:"", gerakan:"", hb:"", protein:"Negatif" as VitalLog["protein"], catatan:"" });
-  function setVF(k: keyof typeof vForm, v: string) { setVForm(p => ({ ...p, [k]: v })); }
 
   const latestVital = vitalLogs.at(-1);
 
+  // Tanda bahaya mengacu pada Buku KIA Kemenkes RI; perlu ditinjau tenaga kesehatan sebelum rilis.
+  // Kode lama (nausea, dizzy, swelling, bleed, headache, vision, pain, fever) dipertahankan agar log yang sudah tersimpan tetap terbaca.
   const symList = [
-    { id: "nausea",   label: "Mual / Muntah",     risk: "green"  as Risk },
-    { id: "dizzy",    label: "Pusing / Lemas",     risk: "yellow" as Risk },
-    { id: "swelling", label: "Bengkak Kaki",       risk: "yellow" as Risk },
-    { id: "bleed",    label: "Bercak Darah",       risk: "red"    as Risk },
-    { id: "headache", label: "Sakit Kepala Berat", risk: "red"    as Risk },
-    { id: "vision",   label: "Pandangan Kabur",    risk: "red"    as Risk },
-    { id: "pain",     label: "Nyeri Perut Hebat",  risk: "red"    as Risk },
-    { id: "fever",    label: "Demam Tinggi",        risk: "yellow" as Risk },
+    { id: "nausea",    label: "Mual Ringan",             risk: "green"  as Risk },
+    { id: "dizzy",     label: "Pusing / Lemas",          risk: "yellow" as Risk },
+    { id: "swelling",  label: "Bengkak Kaki",            risk: "yellow" as Risk },
+    { id: "insomnia",  label: "Sulit Tidur / Cemas",     risk: "yellow" as Risk },
+    { id: "bleed",     label: "Perdarahan / Bercak Darah", risk: "red"  as Risk },
+    { id: "amniotic",  label: "Keluar Air Ketuban",      risk: "red"    as Risk },
+    { id: "fetalmove", label: "Gerakan Janin Berkurang", risk: "red"    as Risk },
+    { id: "vomiting",  label: "Muntah Terus-menerus",    risk: "red"    as Risk },
+    { id: "fever",     label: "Demam Tinggi",            risk: "red"    as Risk },
+    { id: "edema",     label: "Bengkak Wajah / Tangan",  risk: "red"    as Risk },
+    // Digabung karena sama-sama tanda preeklamsia dengan tingkat risiko yang sama
+    { id: "headache",  label: "Sakit Kepala Hebat / Pandangan Kabur", risk: "red" as Risk },
+    { id: "seizure",   label: "Kejang",                  risk: "red"    as Risk },
+    { id: "pain",      label: "Nyeri Perut Hebat",       risk: "red"    as Risk },
+  ];
+  const symGroups = [
+    { title: "Keluhan umum", items: symList.filter(s => s.risk !== "red") },
+    { title: "Tanda bahaya — segera ke fasilitas kesehatan", items: symList.filter(s => s.risk === "red") },
   ];
 
   const activeSyms = symList.filter(s => symptoms[s.id]);
@@ -206,67 +236,17 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
     setSymptoms(p => { const { [id]: _, ...rest } = p; return rest; });
   }
 
-  useEffect(() => {
-    if (!contrActive) return;
-    const id = setInterval(() => setElapsed(e => e + 1), 1000);
-    return () => clearInterval(id);
-  }, [contrActive]);
-
-  useEffect(() => {
-    if (!kickActive) return;
-    const id = setInterval(() => setKickSecs(s => s + 1), 1000);
-    return () => clearInterval(id);
-  }, [kickActive]);
-
-  function startKickSession() {
-    setKick(0); setKickSecs(0); setKickStartAt(Date.now()); setKickActive(true);
-  }
-  function resetKick() {
-    setKick(0); setKickSecs(0); setKickStartAt(null); setKickActive(false);
-  }
-  function addKick() {
-    const next = kick + 1;
-    setKick(next);
-    if (next === 10) setKickActive(false);
-  }
-
   const kickMins = Math.floor(kickSecs / 60);
   const kickSecRem = kickSecs % 60;
   const kickTimeStr = kickActive || kickSecs > 0
     ? `${String(kickMins).padStart(2,"0")}:${String(kickSecRem).padStart(2,"0")}`
     : "00:00";
-  const MAX_SECS = 7200;
-  const timerPct = Math.min(100, (kickSecs / MAX_SECS) * 100);
-
-  function toggleContr() {
-    const now = Date.now();
-    if (!contrActive) {
-      setContrStart(now); setElapsed(0); setContrActive(true);
-    } else {
-      const dur = Math.round((now - (contrStart ?? now)) / 1000);
-      const gap = lastEnd ? Math.round((now - lastEnd) / 60000) : 0;
-      setContractions(p => [...p, { dur, gap }]);
-      setLastEnd(now); setContrActive(false); setContrStart(null);
-    }
-  }
+  const timerPct = Math.min(100, (kickSecs * 1000 / KICK_MAX_MS) * 100);
 
   const avgGap = contractions.length > 1
     ? Math.round(contractions.slice(-3).reduce((a, c) => a + c.gap, 0) / Math.min(contractions.length, 3))
     : null;
   const is511 = contractions.length >= 3 && avgGap !== null && avgGap <= 5 && (contractions.at(-1)?.dur ?? 0) >= 60;
-
-  function handleSaveVital() {
-    if (!vForm.td || !vForm.bb) return;
-    const now = new Date();
-    onAddVital({
-      id: `v${Date.now()}`,
-      date: now.toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" }),
-      minggu: vitalLogs.at(-1)?.minggu ?? 0,
-      ...vForm,
-    });
-    setVForm({ td:"", bb:"", fundus:"", gerakan:"", hb:"", protein:"Negatif", catatan:"" });
-    setShowVitalForm(false);
-  }
 
   return (
     <div className="space-y-5 w-full">
@@ -291,19 +271,40 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
         )}
       </div>
 
+      {/* Sesi kontraksi/kick yang belum berhasil terkirim — dikirim ulang otomatis */}
+      {trackers.sync.pendingCount > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: "#fffbeb", border: "1px solid #fcd34d" }}>
+          <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
+          <p className="flex-1 text-xs text-amber-800">
+            <span className="font-bold">{trackers.sync.pendingCount} sesi belum tersimpan ke server.</span>{" "}
+            {trackers.sync.error ?? "Sedang mengirim…"} Data aman di perangkat ini dan akan dikirim ulang otomatis.
+          </p>
+          <button onClick={trackers.sync.retry} className="ui-interactive text-[11px] font-bold px-3 py-1.5 rounded-full flex-shrink-0"
+            style={{ background: "#fde68a", color: "#92400e" }}>
+            Coba sekarang
+          </button>
+        </div>
+      )}
+
       {/* Kontraksi Instan */}
       <Card t={t} className="p-6">
         <div className="flex items-center justify-between mb-5">
           <SectionTitle>Kontraksi Instan</SectionTitle>
-          {is511 && (
-            <span className="text-sm font-bold text-red-600 bg-red-50 px-4 py-1.5 rounded-full animate-pulse">
-              Aturan 5-1-1 — Segera ke RS
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {is511 && (
+              <span className="text-sm font-bold text-red-600 bg-red-50 px-4 py-1.5 rounded-full animate-pulse">
+                Aturan 5-1-1 — Segera ke RS
+              </span>
+            )}
+            <button onClick={() => setHistoryTab("contraction")} className="ui-interactive flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full"
+                style={{ background: t.soft, color: t.active }}>
+                <History size={11} /> Riwayat
+              </button>
+          </div>
         </div>
         <div className="flex items-start gap-8">
           <button onClick={toggleContr}
-            className="w-44 h-44 rounded-full font-bold text-white flex flex-col items-center justify-center gap-2 flex-shrink-0 transition-all text-base"
+            className="ui-interactive w-44 h-44 rounded-full font-bold text-white flex flex-col items-center justify-center gap-2 flex-shrink-0 text-base"
             style={{
               background: contrActive ? "linear-gradient(135deg,#ef4444,#b91c1c)" : `linear-gradient(135deg,${t.primary},${t.active})`,
               boxShadow: contrActive ? "0 0 0 10px rgba(239,68,68,0.15)" : `0 0 0 10px ${t.primary}30`,
@@ -350,7 +351,7 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
               {latestVital && <p className="text-[11px]" style={{ color: t.muted }}>{latestVital.date} · Minggu ke-{latestVital.minggu}</p>}
             </div>
             <button onClick={() => setShowVitalForm(v => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+              className="ui-interactive flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
               style={{ background: showVitalForm ? t.active : t.soft, color: showVitalForm ? "#fff" : t.active }}>
               <Plus size={12} /> Catat Baru
             </button>
@@ -358,87 +359,8 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
 
           {showVitalForm ? (
             <div className="border-t pt-4" style={{ borderColor: t.border }}>
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                {[
-                  { key:"td",     label:"Tekanan Darah", placeholder:"118/76", hint:"mmHg" },
-                  { key:"bb",     label:"Berat Badan",   placeholder:"68.5",   hint:"kg"   },
-                  { key:"fundus", label:"Tinggi Fundus", placeholder:"32",     hint:"cm"   },
-                  { key:"gerakan",label:"Gerakan Janin", placeholder:"8-10",   hint:"/2jam"},
-                  { key:"hb",     label:"Hemoglobin",    placeholder:"11.8",   hint:"g/dL" },
-                ].map(({ key, label, placeholder, hint }) => (
-                  <div key={key}>
-                    <label className="text-[10px] font-bold block mb-1" style={{ color: t.dark }}>{label}</label>
-                    {key === "td" ? (
-                      <div className="relative flex items-center rounded-lg border-2 pr-9 transition-all overflow-hidden"
-                        style={{ borderColor: vForm.td ? t.primary : t.border, background: t.soft, color: t.dark }}>
-                        <input
-                          className="w-full bg-transparent text-center outline-none py-2 text-xs placeholder:text-gray-400"
-                          placeholder="118"
-                          value={vForm.td.split('/')[0] || ""}
-                          onChange={e => {
-                            const sys = e.target.value.replace(/\D/g, "").slice(0, 3);
-                            const dia = vForm.td.split('/')[1] || "";
-                            setVF("td", sys || dia ? `${sys}/${dia}` : "");
-                          }}
-                        />
-                        <span className="text-xs font-black opacity-30">/</span>
-                        <input
-                          className="w-full bg-transparent text-center outline-none py-2 text-xs placeholder:text-gray-400"
-                          placeholder="76"
-                          value={vForm.td.split('/')[1] || ""}
-                          onChange={e => {
-                            const sys = vForm.td.split('/')[0] || "";
-                            const dia = e.target.value.replace(/\D/g, "").slice(0, 3);
-                            setVF("td", sys || dia ? `${sys}/${dia}` : "");
-                          }}
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px]" style={{ color: t.muted }}>{hint}</span>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <input
-                          className="w-full rounded-lg px-2.5 py-2 text-xs outline-none border-2 pr-9"
-                          style={{ borderColor: vForm[key as keyof typeof vForm] ? t.primary : t.border, background: t.soft, color: t.dark }}
-                          placeholder={placeholder}
-                          value={vForm[key as keyof typeof vForm]}
-                          onChange={e => {
-                            let v = e.target.value;
-                            if (key === "bb" || key === "fundus" || key === "hb") {
-                              v = v.replace(/[^\d.]/g, "");
-                              if (v.split(".").length > 2) v = v.substring(0, v.length - 1);
-                            } else if (key === "gerakan") {
-                              v = v.replace(/[^\d-]/g, "");
-                            }
-                            setVF(key as keyof typeof vForm, v);
-                          }}
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px]" style={{ color: t.muted }}>{hint}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div>
-                  <label className="text-[10px] font-bold block mb-1" style={{ color: t.dark }}>Protein Urin</label>
-                  <select className="w-full rounded-lg px-2.5 py-2 text-xs outline-none border-2"
-                    style={{ borderColor: t.border, background: t.soft, color: t.dark }}
-                    value={vForm.protein} onChange={e => setVF("protein", e.target.value)}>
-                    {["Negatif", "+", "++", "+++"].map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="text-[10px] font-bold block mb-1" style={{ color: t.dark }}>Catatan (opsional)</label>
-                <input className="w-full rounded-lg px-2.5 py-2 text-xs outline-none border-2"
-                  style={{ borderColor: t.border, background: t.soft, color: t.dark }}
-                  placeholder="cth: sedikit pusing pagi"
-                  value={vForm.catatan} onChange={e => setVF("catatan", e.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <PillBtn variant="active" size="sm" onClick={handleSaveVital} disabled={!vForm.td || !vForm.bb} t={t}>
-                  <Check size={13} /> Simpan
-                </PillBtn>
-                <PillBtn variant="outline" size="sm" onClick={() => setShowVitalForm(false)} t={t}>Batal</PillBtn>
-              </div>
+              <VitalEntryForm compact t={t} weeksPreg={weeksPreg} onAddVital={onAddVital}
+                onCancel={() => setShowVitalForm(false)} onSaved={() => setShowVitalForm(false)} />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
@@ -450,14 +372,22 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
                 { l:"HB",      v:latestVital.hb,      u:"g/dL"  },
                 { l:"Protein", v:latestVital.protein, u:""      },
               ].map(({ l, v, u }) => (
-                <div key={l} className="rounded-xl p-3 text-center" style={{ background: t.soft }}>
-                  <p className="text-[10px] mb-1" style={{ color: t.muted }}>{l}</p>
-                  <p className="text-sm font-extrabold" style={{ color: t.dark }}>{v || "—"}</p>
-                  <p className="text-[10px]" style={{ color: t.muted }}>{u}</p>
+                <div key={l} className="rounded-xl px-3 py-2 text-center" style={{ background: t.soft }}>
+                  <p className="text-[10px]" style={{ color: t.muted }}>{l}</p>
+                  {/* Satuan sebaris dengan angka agar kotak lebih pendek */}
+                  <p className="text-sm font-extrabold" style={{ color: t.dark }}>
+                    {v || "—"}{v && u && <span className="text-[10px] font-normal ml-1" style={{ color: t.muted }}>{u}</span>}
+                  </p>
                 </div>
               )) : (
                 <p className="col-span-2 text-center text-xs py-3" style={{ color: t.muted }}>Belum ada data vital.</p>
               )}
+            </div>
+          )}
+          {/* Peringatan tepat di bawah angka yang dimaksud */}
+          {!showVitalForm && (
+            <div className="mt-3">
+              <VitalDangerAlert compact vital={latestVital} onEmergency={onEmergency} />
             </div>
           )}
         </Card>
@@ -466,30 +396,31 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
         <Card t={t} className="p-5 flex flex-col h-full">
           <div className="flex items-center justify-between mb-1">
             <SectionTitle>Kick Counter</SectionTitle>
-            {(kickActive || kick > 0) && (
-              <button onClick={resetKick} className="text-[10px] font-bold px-2 py-1 rounded-full"
-                style={{ background: t.soft, color: t.muted }}>
-                Reset
+            <div className="flex items-center gap-2">
+              <button onClick={() => setHistoryTab("kick")} className="ui-interactive flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full"
+                style={{ background: t.soft, color: t.active }}>
+                <History size={11} /> Riwayat
               </button>
-            )}
+              {kickActive && (
+                <button onClick={kickTracker.stop} className="ui-interactive flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full"
+                  style={{ background: "#fee2e2", color: "#dc2626" }}>
+                  <span className="w-2 h-2 rounded-sm bg-current" /> Hentikan
+                </button>
+              )}
+            </div>
           </div>
           <p className="text-[11px] mb-2" style={{ color: t.muted }}>Target: 10 gerakan dalam 2 jam</p>
 
           {/* Dot grid — 10 target dots, extra shown as +N */}
-          <div className="grid grid-cols-5 place-items-center gap-y-4 mb-5 w-full flex-1 content-center">
+          <div className="grid grid-cols-5 place-items-center gap-y-3 mb-4 w-full flex-1 content-center">
             {Array.from({ length: 10 }).map((_, i) => (
-              <div key={i} className="w-12 h-12 sm:w-14 sm:h-14 rounded-full transition-all duration-200"
+              <div key={i} className="w-10 h-10 rounded-full transition-all duration-200"
                 style={{
                   background: i < kick ? "#22c55e" : t.soft,
                   boxShadow: i < kick ? "0 0 0 3px #22c55e22" : "none",
                 }} />
             ))}
           </div>
-          {kick > 10 && (
-            <p className="text-center text-[10px] font-bold mb-2" style={{ color: t.active }}>
-              +{kick - 10} ekstra di atas target
-            </p>
-          )}
 
           {/* Count + tap button */}
           <div className="flex items-center gap-3 mb-3">
@@ -499,15 +430,15 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
                 {kick < 10 ? `dari 10 target` : kick === 10 ? "target tercapai" : `+${kick - 10} ekstra`}
               </p>
             </div>
-            {!kickActive && kick === 0 ? (
+            {!kickTracker.started || kickTracker.finished ? (
               <button onClick={startKickSession}
-                className="flex-1 py-2.5 rounded-2xl text-[13px] font-bold text-white transition-all"
+                className="ui-interactive flex-1 py-2.5 rounded-2xl text-[13px] font-bold text-white"
                 style={{ background: t.grad }}>
-                Mulai Sesi
+                {kickTracker.finished ? "Mulai Sesi Baru" : "Mulai Sesi"}
               </button>
             ) : (
               <button onClick={addKick}
-                className="flex-1 py-2.5 rounded-2xl text-[13px] font-bold text-white transition-all active:scale-95"
+                className="ui-interactive flex-1 py-2.5 rounded-2xl text-[13px] font-bold text-white"
                 style={{ background: kick >= 10 ? "#22c55e" : t.active }}>
                 + Tendangan
               </button>
@@ -524,18 +455,35 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
               <div className="h-full rounded-full transition-all"
                 style={{ width: `${timerPct}%`, background: timerPct > 90 ? "#ef4444" : t.primary }} />
             </div>
-            {kick >= 10 && (
-              <div className="rounded-xl py-2 text-center" style={{ background: "#f0fdf4" }}>
+            {kick >= 10 && kickTracker.targetSecs !== null && (
+              <div className="rounded-xl py-2 px-3 text-center" style={{ background: "#f0fdf4" }}>
                 <p className="text-xs font-bold text-green-600">
-                  Target tercapai dalam {kickMins}m {kickSecRem}s
+                  Target tercapai dalam {Math.floor(kickTracker.targetSecs / 60)}m {kickTracker.targetSecs % 60}s
                   {kick > 10 ? ` · total ${kick} gerakan` : ""}
+                </p>
+                <p className="text-[10px] mt-0.5 text-green-700">
+                  {kickActive ? "Lanjutkan menghitung, atau klik Hentikan bila sudah selesai." : "Sesi selesai · tersimpan di Riwayat."}
                 </p>
               </div>
             )}
-            {(kickActive || kick > 0) && kick < 10 && (
+            {kickActive && kick < 10 && (
               <p className="text-center text-[11px]" style={{ color: t.muted }}>
                 {10 - kick} gerakan lagi • sesi berjalan
               </p>
+            )}
+            {kickTracker.timedOut && (
+              <div className="rounded-xl py-2 px-3 text-center" style={{ background: "#fef2f2" }}>
+                <p className="text-xs font-bold text-red-600">
+                  Sesi 2 jam selesai dengan {kick} gerakan (kurang dari 10). Segera hubungi bidan/dokter.
+                </p>
+              </div>
+            )}
+            {kickTracker.stoppedEarly && (
+              <div className="rounded-xl py-2 px-3 text-center" style={{ background: t.soft }}>
+                <p className="text-xs font-semibold" style={{ color: t.muted }}>
+                  Sesi dihentikan dengan {kick} gerakan dalam {kickMins}m {kickSecRem}s. Tersimpan di Riwayat.
+                </p>
+              </div>
             )}
           </div>
         </Card>
@@ -545,62 +493,69 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
       <div className="grid grid-cols-2 gap-4 items-stretch">
         <Card t={t} className="p-5 h-full">
           <SectionTitle>Log Gejala Hari Ini</SectionTitle>
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            {symList.map(({ id, label, risk: r }) => {
-              const rc = { green: "#22c55e", yellow: "#f59e0b", red: "#ef4444" }[r];
-              return (
-                <button key={id}
-                  onClick={() => onToggleSymptom(id, !symptoms[id], label, r)}
-                  className="rounded-xl px-3 py-2.5 text-xs font-semibold transition-all text-center"
-                  style={{
-                    background: symptoms[id] ? rc + "15" : t.soft,
-                    border: `1.5px solid ${symptoms[id] ? rc : "transparent"}`,
-                    color: symptoms[id] ? rc : t.muted,
-                  }}>
-                  {symptoms[id] ? "✓ " : ""}{label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 pt-4" style={{ borderTop: `1px dashed ${t.border}` }}>
-            <p className="text-[11px] font-bold mb-2" style={{ color: t.muted }}>Gejala lainnya</p>
-            {customSymptoms.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {customSymptoms.map(({ id, label }) => (
-                  <div key={id} className="flex items-center rounded-full text-xs font-semibold transition-all"
-                    style={{
-                      background: symptoms[id] ? t.active + "15" : t.soft,
-                      border: `1.5px solid ${symptoms[id] ? t.active : "transparent"}`,
-                      color: symptoms[id] ? t.active : t.muted,
-                    }}>
-                    <button onClick={() => setSymptoms(p => ({ ...p, [id]: !p[id] }))} className="pl-3 pr-1.5 py-1.5">
-                      {symptoms[id] ? "✓ " : ""}{label}
+          {symGroups.map((group, gi) => (
+            <div key={group.title} className="mt-4">
+              <p className="text-[11px] font-bold mb-2" style={{ color: gi === 0 ? t.muted : "#ef4444" }}>{group.title}</p>
+              {/* Grid 3 kolom berkotak pendek dengan tinggi seragam; label panjang turun ke baris kedua */}
+              <div className="grid grid-cols-3 gap-2">
+                {group.items.map(({ id, label, risk: r }) => {
+                  const rc = { green: "#22c55e", yellow: "#f59e0b", red: "#ef4444" }[r];
+                  return (
+                    <button key={id}
+                      onClick={() => onToggleSymptom(id, !symptoms[id], label, r)}
+                      className="min-h-[44px] rounded-xl px-2 py-1.5 text-[11px] font-semibold leading-tight text-center transition-colors duration-150 motion-reduce:transition-none"
+                      style={{
+                        background: symptoms[id] ? rc + "15" : t.soft,
+                        border: `1.5px solid ${symptoms[id] ? rc : "transparent"}`,
+                        color: symptoms[id] ? rc : t.muted,
+                      }}>
+                      {label}
                     </button>
-                    <button onClick={() => removeCustomSymptom(id)} title="Hapus gejala" className="pr-2.5 pl-0.5 py-1.5 opacity-60 hover:opacity-100">
-                      <X size={12} />
+                  );
+                })}
+                {/* Gejala tambahan user ikut keluhan umum: kotak sama, warna tema karena tidak dinilai risikonya, plus tombol hapus */}
+                {gi === 0 && customSymptoms.map(({ id, label }) => (
+                  <div key={id} className="relative">
+                    <button onClick={() => setSymptoms(p => ({ ...p, [id]: !p[id] }))}
+                      className="w-full h-full min-h-[44px] rounded-xl pl-2 pr-5 py-1.5 text-[11px] font-semibold leading-tight text-center break-words transition-colors duration-150 motion-reduce:transition-none"
+                      style={{
+                        background: symptoms[id] ? t.active + "15" : t.soft,
+                        border: `1.5px solid ${symptoms[id] ? t.active : "transparent"}`,
+                        color: symptoms[id] ? t.active : t.muted,
+                      }}>
+                      {label}
+                    </button>
+                    <button onClick={() => removeCustomSymptom(id)} title="Hapus gejala" aria-label={`Hapus gejala ${label}`}
+                      className="absolute right-1 top-1 w-4 h-4 rounded-full flex items-center justify-center opacity-60 hover:opacity-100"
+                      style={{ color: symptoms[id] ? t.active : t.muted }}>
+                      <X size={11} />
                     </button>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          ))}
+
+          <div className="mt-4 pt-4" style={{ borderTop: `1px dashed ${t.border}` }}>
+            <p className="text-[11px] font-bold mb-2" style={{ color: t.muted }}>Gejala lainnya</p>
             <form onSubmit={e => { e.preventDefault(); addCustomSymptom(); }} className="flex gap-2">
-              <input value={newSym} onChange={e => setNewSym(e.target.value)} placeholder="Contoh: kram kaki, susah tidur" maxLength={40}
+              <input value={newSym} onChange={e => setNewSym(e.target.value)} placeholder="Contoh: kram kaki, sembelit" maxLength={40}
                 className="flex-1 min-w-0 rounded-xl px-3 py-2 text-xs outline-none"
                 style={{ background: "#fff", border: `1.5px solid ${t.border}`, color: t.dark }} />
               <button type="submit" disabled={!newSym.trim()}
-                className="flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white transition-all disabled:opacity-40"
+                className="ui-interactive flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white disabled:opacity-40 disabled:pointer-events-none"
                 style={{ background: t.active }}>
                 <Plus size={13} /> Tambah
               </button>
             </form>
             <p className="text-[10px] mt-2 leading-relaxed" style={{ color: t.muted }}>
-              Gejala tambahan hanya dicatat dan tidak dinilai otomatis. Konsultasikan ke bidan/dokter bila mengkhawatirkan.
+              Daftar tanda bahaya mengacu pada Buku KIA Kemenkes RI. Gejala tambahan hanya dicatat dan tidak dinilai otomatis. Konsultasikan ke bidan/dokter bila mengkhawatirkan.
             </p>
           </div>
         </Card>
         <VitaminTracker t={t} done={vitDone} setDone={setVitDone} onToggleVitamin={onToggleVitamin} vitamins={vitamins} setVitamins={setVitamins} onSaveVitamins={onSaveVitamins} className="h-full" />
       </div>
+      <SessionHistoryModal isOpen={historyTab !== null} initialTab={historyTab ?? "contraction"} onClose={() => setHistoryTab(null)} t={t} />
     </div>
   );
 }

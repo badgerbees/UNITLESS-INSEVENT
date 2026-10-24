@@ -8,7 +8,7 @@ from app.core.config import settings
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Backend API for the UNITLESS pregnancy companion application.",
+    description="Backend API for the TemanBunda pregnancy companion application.",
 )
 
 app.add_middleware(

@@ -4,15 +4,6 @@
 @import './organ-anim.css';
 
 @layer components {
-  .ui-card {
-    transition: transform 220ms ease, box-shadow 220ms ease;
-    will-change: transform;
-  }
-
-  .ui-card:hover {
-    transform: translateY(-3px);
-  }
-
   .ui-interactive {
     transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
   }
@@ -24,6 +15,12 @@
 
   .ui-interactive:active {
     transform: translateY(1px) scale(0.985);
+  }
+
+  /* Tombol nonaktif tidak bereaksi terhadap hover/tekan */
+  .ui-interactive:disabled {
+    filter: none;
+    transform: none;
   }
 
   .page-content {
@@ -42,14 +39,12 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ui-card,
     .ui-interactive,
     .page-content {
       animation: none;
       transition: none;
     }
 
-    .ui-card:hover,
     .ui-interactive:hover,
     .ui-interactive:active {
       transform: none;

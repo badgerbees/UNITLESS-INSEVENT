@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Theme, VitalLog, EmergencyAlert, Risk, Mode } from "../types";
 import { Card } from "../components/Card";
 import { PillBtn } from "../components/PillBtn";
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { APP_NAME } from "../constants/brand";
 import { api, ApiError } from "../services/api";
+import { BirthPlanDocument } from "../components/BirthPlanDocument";
+import { printElement } from "../utils/printElement";
 
 
 export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose: () => void; t: Theme }) {
@@ -85,7 +87,7 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
                 <div className="grid grid-cols-2 gap-2">
                   {topics.map(item => (
                     <button key={item} type="button" onClick={() => setTopic(item)}
-                      className="rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-all"
+                      className="rounded-xl px-3 py-2.5 text-left text-xs font-semibold"
                       style={{ background: topic === item ? t.active : t.soft, color: topic === item ? "#fff" : t.dark }}>
                       {item}
                     </button>
@@ -97,7 +99,7 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
                 className="w-full rounded-2xl px-4 py-3 text-sm outline-none resize-none"
                 style={{ color: t.dark, border: `1.5px solid ${t.border}`, background: "#fff" }} />
               <button type="submit" disabled={!message.trim()}
-                className="w-full rounded-full py-3 text-sm font-bold text-white flex items-center justify-center gap-2 transition-all"
+                className="ui-interactive w-full rounded-full py-3 text-sm font-bold text-white flex items-center justify-center gap-2"
                 style={{ background: !message.trim() ? "#d8d1d8" : t.grad }}>
                 <Send size={15} /> Kirim ke Customer Service
               </button>
@@ -130,7 +132,10 @@ export function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; 
   );
 }
 
-export function ResourcesScreen({ t }: { t: Theme }) {
+export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, doctor }: {
+  t: Theme; motherName: string; fatherName: string; dueDate: Date; hospital: string; doctor: string;
+}) {
+  const birthPlanDocRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<Record<string, boolean>>({
     baju_ibu: true, pembalut: true, sabun: true,
     baju_bayi: true, selimut: true, popok: false,
@@ -241,6 +246,12 @@ export function ResourcesScreen({ t }: { t: Theme }) {
     }
   }
 
+  function printBirthPlan() {
+    if (!birthPlanDocRef.current) return;
+    const date = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    void printElement(birthPlanDocRef.current, `Rencana Persalinan - ${motherName || "Bunda"} - ${date}`, "portrait");
+  }
+
   function toggleBirthPlan(optionKey: string) {
     const selected = !birthPlan[optionKey];
     setBirthPlan(previous => ({ ...previous, [optionKey]: selected }));
@@ -272,7 +283,7 @@ export function ResourcesScreen({ t }: { t: Theme }) {
       <div className="flex items-center justify-between px-1">
         <p className="text-sm font-extrabold" style={{ color: t.dark }}>Daftar Bawaan per Kategori</p>
         <button onClick={() => setEditMode(!editMode)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+          className="ui-interactive flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
           style={{ background: editMode ? t.active : t.soft, color: editMode ? "#fff" : t.active }}>
           {editMode ? <Check size={12} /> : <Plus size={12} />} {editMode ? "Selesai Edit" : "Edit List"}
         </button>
@@ -286,7 +297,7 @@ export function ResourcesScreen({ t }: { t: Theme }) {
               {cat.items.map(({ id, l }) => (
                 <div key={id} className="flex items-center gap-2">
                   <button onClick={() => toggleChecklistItem(id)}
-                    className="flex-1 flex items-center gap-2 rounded-xl px-2 py-2 transition-all"
+                    className="flex-1 flex items-center gap-2 rounded-xl px-2 py-2"
                     style={{ background: items[id] ? "#f0fdf4" : t.soft }}>
                     <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0" style={{ background: items[id] ? "#22c55e" : t.border }}>
                       {items[id] && <Check size={10} className="text-white" />}
@@ -315,7 +326,7 @@ export function ResourcesScreen({ t }: { t: Theme }) {
                   onKeyDown={e => e.key === 'Enter' && handleAddItem(cat.id)}
                 />
                 <button onClick={() => handleAddItem(cat.id)}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                  className="ui-interactive w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ background: newInputs[cat.id]?.trim() ? t.active : t.soft, color: newInputs[cat.id]?.trim() ? "#fff" : t.muted }}>
                   <Plus size={14} />
                 </button>
@@ -330,14 +341,20 @@ export function ResourcesScreen({ t }: { t: Theme }) {
         <Card t={t} className="p-6">
           <div className="flex items-center justify-between mb-4">
             <SectionTitle>Rencana Persalinan (Birth Plan)</SectionTitle>
-            <button className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full transition-all" style={{ background: t.soft, color: t.active }}>
+            <button onClick={printBirthPlan} className="ui-interactive flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.active }}>
               <Printer size={12} /> Cetak
             </button>
+            {/* Dokumen cetak disembunyikan; hanya dipakai sebagai sumber isi saat Cetak diklik */}
+            <div style={{ display: "none" }}>
+              <BirthPlanDocument ref={birthPlanDocRef} motherName={motherName} fatherName={fatherName} dueDate={dueDate}
+                hospital={hospital} doctor={doctor}
+                options={birthPlanList.map(bp => ({ id: bp.id, label: bp.label, sub: bp.sub, selected: !!birthPlan[bp.id] }))} />
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             {birthPlanList.map(bp => (
               <button key={bp.id} onClick={() => toggleBirthPlan(bp.id)}
-                className="flex items-center gap-3 p-3 rounded-xl transition-all text-left hover:brightness-95"
+                className="flex items-center gap-3 p-3 rounded-xl text-left"
                 style={{ background: birthPlan[bp.id] ? t.soft : "#f9f9f9", border: `1.5px solid ${birthPlan[bp.id] ? t.primary : "transparent"}` }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-white shadow-sm">
                   <bp.Icon size={14} color={birthPlan[bp.id] ? t.active : t.muted} />

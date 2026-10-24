@@ -80,7 +80,7 @@ export function PostpartumScreen({ t, onBack }: { t: Theme; onBack: () => void }
           <div className="space-y-2">
             {adminSteps.map(s => (
               <button key={s.id} onClick={() => setChecks(p => ({ ...p, [s.id]: !p[s.id] }))}
-                className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all"
+                className="w-full flex items-center gap-3 rounded-xl px-4 py-3"
                 style={{ background: checks[s.id] ? "#f0fdf4" : t.soft }}>
                 <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: checks[s.id] ? "#22c55e" : t.primary }}>
                   {checks[s.id] ? <Check size={14} className="text-white" /> : <span className="text-[10px] font-bold text-white">·</span>}

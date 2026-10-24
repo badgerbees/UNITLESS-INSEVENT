@@ -1,2 +1,2 @@
-// Nama aplikasi sementara — ganti di sini saja kalau nama web sudah ditentukan
-export const APP_NAME = "Nama Web";
+// Nama aplikasi — file logo ada di src/assets & public (sumber lengkap di branding/logo)
+export const APP_NAME = "TemanBunda";

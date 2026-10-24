@@ -12,11 +12,12 @@ export type VitalLog = {
 };
 
 export type EmergencyAlert = {
+  id: string;
   sentAt: Date;
   trigger: "manual" | "511" | "symptom";
   location: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   contractions?: string;
   message: string;
   husbandAck: boolean;
@@ -44,6 +45,9 @@ export type Risk = "green" | "yellow" | "red";
 export type UserProfile = {
   motherName: string;
   fatherName: string;
+  // Nomor HP ibu & pendamping dari data anggota kehamilan (untuk tombol telepon di Mode Darurat)
+  motherPhone?: string;
+  fatherPhone?: string;
   email: string;
   phone: string;
   hphtDate: string;

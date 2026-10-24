@@ -4,7 +4,7 @@ import {
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
   PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
-  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
+  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, PanelLeftClose, PanelLeftOpen, Timer, Footprints
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Theme, Mode, Screen, UserProfile } from "../types";
@@ -13,9 +13,12 @@ import { Card } from "../components/Card";
 import { LoginScreen } from "../pages/LoginScreen";
 import { addDays, getFruit, fmtDate } from "../utils/helpers";
 import { APP_NAME } from "../constants/brand";
+import logoIcon from "../assets/temanbunda-app-icon.svg";
 import { auth, type AuthForm } from "../services/auth";
 import { useAuth } from "../hooks/useAuth";
-import { api } from "../services/api";
+import { useNotifications } from "../hooks/useNotifications";
+import { useTrackers, KICK_TARGET } from "../hooks/useTrackers";
+import { api, type AppNotification } from "../services/api";
 import { useAppData } from "./useAppData";
 import { AppRoutes } from "./AppRoutes";
 import { PregnancySetupScreen } from "../pages/PregnancySetupScreen";
@@ -410,7 +413,7 @@ function SettingsModal({
             </button>
             <button
               onClick={handleSave}
-              className="px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all hover:scale-105 active:scale-95"
+              className="ui-interactive px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md"
               style={{ background: t.grad }}
             >
               Simpan Perubahan
@@ -420,6 +423,32 @@ function SettingsModal({
       </div>
     </div>
   );
+}
+
+const NOTIF_META: Record<AppNotification["kind"], { Icon: typeof Bell; color: string; bg: string }> = {
+  emergency:          { Icon: AlertTriangle, color: "#ef4444", bg: "#fee2e2" },
+  emergency_ack:      { Icon: CheckCheck,    color: "#16a34a", bg: "#dcfce7" },
+  emergency_resolved: { Icon: Check,         color: "#16a34a", bg: "#dcfce7" },
+  vitamin:            { Icon: Droplets,      color: "#f59e0b", bg: "#fef3c7" },
+  anc:                { Icon: Calendar,      color: "#6366f1", bg: "#e0e7ff" },
+  weekly_report:      { Icon: Baby,          color: "#ec4899", bg: "#fce7f3" },
+  info:               { Icon: Bell,          color: "#6b7280", bg: "#f3f4f6" },
+};
+
+function fmtDuration(totalSecs: number) {
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = String(totalSecs % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+function timeAgo(iso: string) {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return "Baru saja";
+  if (minutes < 60) return `${minutes} menit lalu`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} jam lalu`;
+  return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
 // ─── App Root ─────────────────────────────────────────────────────────────────
@@ -434,6 +463,12 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const screen = location.pathname.substring(1) || "dashboard";
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("sidebarCollapsed") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0"); } catch { /* storage tidak tersedia */ }
+  }, [collapsed]);
   const [showSearch, setShowSearch] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
@@ -442,10 +477,14 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const {
-    hasPregnancy, alert, setAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
+    hasPregnancy, loadError, retryLoad, alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
-    addVital, toggleVitamin, toggleSymptom, saveVitamins, handleAck, handleSetEta,
+    addVital, toggleVitamin, toggleSymptom, saveVitamins,
   } = useAppData(user);
+  const {
+    notifications, unreadCount, permission: notifPermission, requestPermission, markRead, markAllRead,
+  } = useNotifications(user, { sound: userProfile.notifEmergencySound, onOpen: link => navigate(link) });
+  const trackers = useTrackers(user);
 
   const t = THEMES[mode];
 
@@ -502,6 +541,25 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+  if (hasPregnancy === null && loadError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ background: t.bg }}>
+        <p className="text-sm font-bold" style={{ color: t.dark }}>Gagal memuat data akun</p>
+        <p className="text-xs max-w-sm" style={{ color: t.muted }}>
+          Server tidak dapat dihubungi atau sedang bermasalah. Periksa koneksi internet lalu coba lagi.
+        </p>
+        <div className="flex gap-2 mt-1">
+          <button onClick={() => void auth.signOut()} className="ui-interactive px-4 py-2 rounded-full text-xs font-bold" style={{ background: t.soft, color: t.active }}>
+            Keluar
+          </button>
+          <button onClick={retryLoad} className="ui-interactive px-4 py-2 rounded-full text-xs font-bold text-white" style={{ background: t.grad }}>
+            Coba lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (hasPregnancy === null) {
     return <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">Menyiapkan akun...</div>;
   }
@@ -510,8 +568,20 @@ export default function App() {
     return <PregnancySetupScreen t={t} mode={mode} onCreated={() => window.location.reload()} />;
   }
 
-  const filteredNavItems = navItems.filter(item => 
-    item.label.toLowerCase().includes(searchQuery.toLowerCase())
+  // Daftar fitur untuk search bar — tampil semua saat kosong, terfilter saat user mengetik
+  const searchFeatures = [
+    { id: "dashboard"  as Screen, label: "Beranda",          desc: "Ringkasan kehamilan & perkembangan si kecil", Icon: Home,          keywords: "dashboard minggu janin bayi" },
+    { id: "health"     as Screen, label: "Kesehatan",        desc: "Catat tekanan darah, berat badan & gejala",   Icon: Activity,      keywords: "vital tekanan darah gejala risiko" },
+    { id: "calendar"   as Screen, label: "Kalender",         desc: "Jadwal kontrol & pengingat",                  Icon: Calendar,      keywords: "jadwal kontrol pengingat janji" },
+    { id: "reports"    as Screen, label: "Laporan",          desc: "Laporan medis & ekspor PDF",                  Icon: FileText,      keywords: "laporan medis pdf ekspor dokter" },
+    { id: "resources"  as Screen, label: "Persiapan",        desc: "Persiapan persalinan & bantuan",              Icon: Package,       keywords: "persalinan tas checklist bantuan" },
+    { id: "emergency"  as Screen, label: "Mode Darurat",     desc: "Kirim sinyal darurat ke pendamping",          Icon: AlertTriangle, keywords: "darurat sos bahaya" },
+    { id: "postpartum" as Screen, label: "Pasca-Melahirkan", desc: "Pemulihan setelah melahirkan",                Icon: Baby,          keywords: "nifas pemulihan postpartum" },
+  ];
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredFeatures = searchFeatures.filter(f =>
+    !q || `${f.label} ${f.desc} ${f.keywords}`.toLowerCase().includes(q)
   );
 
   return (
@@ -519,36 +589,62 @@ export default function App() {
       style={{ fontFamily: "'Manrope', sans-serif", background: t.bg }}
     >
       {/* Sidebar */}
-      <aside className="flex flex-col flex-shrink-0 sticky top-0 h-screen transition-colors duration-300"
-        style={{ width: 240, background: "#ffffff", borderRight: `1px solid ${t.border}` }}
+      <aside className="group/sidebar flex flex-col flex-shrink-0 sticky top-0 h-screen transition-[width,background-color] duration-300 overflow-hidden"
+        style={{ width: collapsed ? 76 : 240, background: "#ffffff", borderRight: `1px solid ${t.border}` }}
       >
-        {/* Logo */}
-        <div className="px-6 pt-7 pb-5 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-white text-base"
-              style={{ background: t.grad }}>
-              {APP_NAME[0]}
-            </div>
-            <p className="text-base font-extrabold leading-none" style={{ color: t.dark }}>{APP_NAME}</p>
+        {/* Logo + collapse toggle: tombol perkecil muncul saat sidebar di-hover; saat kecil, logo jadi pemicu perbesar */}
+        {collapsed ? (
+          <div className="pt-7 pb-5 flex-shrink-0 flex justify-center">
+            <button onClick={() => setCollapsed(false)}
+              title="Perbesar sidebar" aria-label="Perbesar sidebar"
+              className="group/logo relative w-10 h-10 rounded-xl flex items-center justify-center"
+            >
+              <img src={logoIcon} alt="" className="w-10 h-10 transition-opacity duration-200 group-hover/logo:opacity-0 group-focus-visible/logo:opacity-0" />
+              <span className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover/logo:opacity-100 group-focus-visible/logo:opacity-100"
+                style={{ background: t.soft }}>
+                <PanelLeftOpen size={18} color={t.active} />
+              </span>
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="px-6 pt-7 pb-5 flex-shrink-0 flex items-center gap-3">
+            <img src={logoIcon} alt="" className="w-10 h-10 flex-shrink-0" />
+            <p className="text-base font-extrabold leading-none whitespace-nowrap" style={{ color: t.dark }}>{APP_NAME}</p>
+            <button onClick={() => setCollapsed(true)}
+              title="Perkecil sidebar" aria-label="Perkecil sidebar"
+              className="ui-interactive ml-auto -mr-2 w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200 hover:bg-black/5 opacity-0 group-hover/sidebar:opacity-100 focus-visible:opacity-100"
+            >
+              <PanelLeftClose size={16} color="#bbb" />
+            </button>
+          </div>
+        )}
 
         {/* Mode toggle */}
-        <div className="px-4 mb-5 flex-shrink-0">
-          <div className="flex rounded-full p-1 gap-1" style={{ background: "#f2f2f2" }}>
-            {(["mother", "companion"] as Mode[]).map(m => (
-              <button key={m} onClick={() => setMode(m)}
-                className="flex-1 py-2 rounded-full text-[12px] font-bold transition-all flex items-center justify-center gap-1"
-                style={{
-                  background: mode === m ? THEMES[m].grad : "transparent",
-                  color: mode === m ? "#fff" : "#999",
-                  boxShadow: mode === m ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
-                }}
-              >
-                {m === "mother" ? "Ibu" : "Suami"}
-              </button>
-            ))}
-          </div>
+        <div className={`mb-5 flex-shrink-0 ${collapsed ? "px-0 flex justify-center" : "px-4"}`}>
+          {collapsed ? (
+            <button onClick={() => setMode(mode === "mother" ? "companion" : "mother")}
+              title={mode === "mother" ? "Mode Ibu — klik untuk ganti ke Mode Suami" : "Mode Suami — klik untuk ganti ke Mode Ibu"}
+              className="ui-interactive w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: t.grad, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
+            >
+              {mode === "mother" ? <Heart size={16} color="#fff" /> : <Users size={16} color="#fff" />}
+            </button>
+          ) : (
+            <div className="flex rounded-full p-1 gap-1" style={{ background: "#f2f2f2" }}>
+              {(["mother", "companion"] as Mode[]).map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  className="flex-1 py-2 rounded-full text-[12px] font-bold transition-all flex items-center justify-center gap-1"
+                  style={{
+                    background: mode === m ? THEMES[m].grad : "transparent",
+                    color: mode === m ? "#fff" : "#999",
+                    boxShadow: mode === m ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
+                  }}
+                >
+                  {m === "mother" ? "Ibu" : "Suami"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Nav */}
@@ -557,34 +653,49 @@ export default function App() {
             const active = screen === id;
             return (
               <button key={id} onClick={() => navigate("/" + id)}
-                className="ui-interactive w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all hover:scale-[1.02] hover:bg-black/5"
+                title={collapsed ? label : undefined}
+                className={`w-full flex items-center gap-3 py-3 rounded-xl text-left transition-colors hover:bg-black/5 ${collapsed ? "justify-center px-0" : "px-4"}`}
                 style={{
                   background: active ? t.soft : "transparent",
                   color: active ? t.active : "#999",
                 }}
               >
-                <Icon size={16} strokeWidth={active ? 2.5 : 1.8} color={active ? t.active : "#bbb"} />
-                <span className="text-[13px] font-semibold">{label}</span>
-                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: t.active }} />}
+                <Icon size={collapsed ? 18 : 16} strokeWidth={active ? 2.5 : 1.8} color={active ? t.active : "#bbb"} />
+                {!collapsed && <span className="text-[13px] font-semibold whitespace-nowrap">{label}</span>}
+                {!collapsed && active && <div className="ml-auto w-1.5 h-1.5 rounded-full" style={{ background: t.active }} />}
               </button>
             );
           })}
           <div className="pt-2 space-y-1">
             <button onClick={() => navigate("/emergency")}
-              className="ui-interactive w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all hover:scale-[1.02] hover:bg-black/5"
+              title={collapsed ? "Mode Darurat" : undefined}
+              className={`w-full flex items-center gap-3 py-3 rounded-xl text-left transition-colors hover:bg-black/5 ${collapsed ? "justify-center px-0" : "px-4"}`}
               style={{ background: screen === "emergency" ? "#fff0f0" : "transparent", color: "#ef4444" }}
             >
-              <PhoneCall size={16} strokeWidth={1.8} color="#ef4444" />
-              <span className="text-[13px] font-semibold">Mode Darurat</span>
+              <PhoneCall size={collapsed ? 18 : 16} strokeWidth={1.8} color="#ef4444" />
+              {!collapsed && <span className="text-[13px] font-semibold whitespace-nowrap">Mode Darurat</span>}
             </button>
           </div>
         </nav>
 
+        {/* Pivot Mode — versi ringkas saat sidebar diperkecil */}
+        {mode === "mother" && collapsed && (
+          <div className="pb-4 flex-shrink-0 flex justify-center">
+            <button onClick={() => navigate("/postpartum")}
+              title="Bayi Telah Lahir? Beralih ke mode pasca-melahirkan"
+              className="ui-interactive w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: t.soft, border: `1.5px solid ${t.border}` }}
+            >
+              <Baby size={18} color={t.active} />
+            </button>
+          </div>
+        )}
+
         {/* Pivot Mode Card */}
-        {mode === "mother" && (
+        {mode === "mother" && !collapsed && (
           <div className="px-4 pb-4 flex-shrink-0">
             <div onClick={() => navigate("/postpartum")}
-              className="ui-interactive rounded-2xl p-3 flex flex-col gap-2.5 cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden"
+              className="rounded-2xl p-3 flex flex-col gap-2.5 cursor-pointer relative overflow-hidden"
               style={{ background: t.soft, border: `1.5px solid ${t.border}` }}
             >
               <div className="flex items-center gap-3">
@@ -596,7 +707,7 @@ export default function App() {
                   <p className="text-[10px]" style={{ color: t.muted }}>Beralih ke mode pasca</p>
                 </div>
               </div>
-              <button className="w-full py-1.5 rounded-xl text-[11px] font-bold text-white transition-all"
+              <button className="ui-interactive w-full py-1.5 rounded-xl text-[11px] font-bold text-white"
                 style={{ background: t.grad }}>
                 Pivot Mode
               </button>
@@ -622,7 +733,24 @@ export default function App() {
             </p>
           </div>
           <div className="flex items-center gap-3 relative">
-            
+
+            {/* Indikator timer yang sedang berjalan — tetap tampil di halaman mana pun, klik untuk kembali ke Kesehatan */}
+            {trackers.contraction.active && (
+              <button onClick={() => navigate("/health")} title="Kontraksi sedang dicatat — buka halaman Kesehatan"
+                className="ui-interactive flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white"
+                style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <Timer size={13} /> Kontraksi {fmtDuration(trackers.contraction.elapsedSecs)}
+              </button>
+            )}
+            {trackers.kick.active && (
+              <button onClick={() => navigate("/health")} title="Sesi kick counter berjalan — buka halaman Kesehatan"
+                className="ui-interactive flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold"
+                style={{ background: t.soft, color: t.active, border: `1.5px solid ${t.border}` }}>
+                <Footprints size={13} /> Kick {trackers.kick.count}/{KICK_TARGET} · {fmtDuration(trackers.kick.elapsedSecs)}
+              </button>
+            )}
+
             {/* Functional Search */}
             <div className="relative">
               <div 
@@ -655,10 +783,15 @@ export default function App() {
               </div>
 
               {/* Search dropdown results */}
-              {showSearch && searchQuery && (
-                <div className="absolute top-full mt-2 left-0 right-0 rounded-2xl overflow-hidden z-50 shadow-xl" style={{ background: "#fff", border: `1px solid ${t.border}` }}>
-                  {filteredNavItems.length > 0 ? (
-                    filteredNavItems.map(item => (
+              {showSearch && (
+                <div className="absolute top-full mt-2 right-0 w-72 rounded-2xl overflow-hidden z-50 shadow-xl" style={{ background: "#fff", border: `1px solid ${t.border}` }}>
+                  {!q && (
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: t.muted }}>
+                      Fitur yang tersedia
+                    </p>
+                  )}
+                  {filteredFeatures.length > 0 ? (
+                    filteredFeatures.map(item => (
                       <button 
                         key={item.id}
                         onMouseDown={() => {
@@ -668,8 +801,13 @@ export default function App() {
                         }}
                         className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors"
                       >
-                        <item.Icon size={14} color={t.muted} />
-                        <span className="text-sm font-semibold" style={{ color: t.dark }}>{item.label}</span>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: t.soft }}>
+                          <item.Icon size={14} color={t.active} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold leading-tight" style={{ color: t.dark }}>{item.label}</p>
+                          <p className="text-[11px] truncate" style={{ color: t.muted }}>{item.desc}</p>
+                        </div>
                       </button>
                     ))
                   ) : (
@@ -686,7 +824,7 @@ export default function App() {
               <button 
                 onClick={() => setShowNotif(!showNotif)}
                 onBlur={() => setTimeout(() => setShowNotif(false), 200)}
-                className="w-9 h-9 rounded-full flex items-center justify-center transition-all focus:outline-none hover:scale-105 shadow-sm"
+                className="ui-interactive w-9 h-9 rounded-full flex items-center justify-center focus:outline-none shadow-sm"
                 style={{ 
                   background: showNotif ? t.soft : t.card,
                   border: `1.5px solid ${t.border}`,
@@ -694,30 +832,64 @@ export default function App() {
                 }}
               >
                 <Bell size={16} color={showNotif ? t.active : t.muted} />
-                {alert && mode === "companion" && !alert.husbandAck && (
-                  <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white animate-pulse" />
+                {unreadCount > 0 && (
+                  <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center border-2 border-white ${notifications.some(n => n.kind === "emergency" && !n.read_at) ? "bg-red-500 animate-pulse" : ""}`}
+                    style={notifications.some(n => n.kind === "emergency" && !n.read_at) ? undefined : { background: t.active }}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
                 )}
               </button>
 
               {/* Notif Popover */}
               {showNotif && (
-                <div className="absolute top-full mt-3 right-0 w-72 rounded-2xl p-4 shadow-xl z-50" style={{ background: "#fff", border: `1px solid ${t.border}` }}>
-                  <p className="text-xs font-bold mb-3 uppercase tracking-wide" style={{ color: t.dark }}>Notifikasi</p>
-                  {alert && mode === "companion" && !alert.husbandAck ? (
-                    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: "#fef2f2", border: "1px solid #fca5a5" }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        <p className="text-[11px] font-bold text-red-700">Panggilan Darurat!</p>
-                      </div>
-                      <p className="text-xs text-red-600">"{alert.message}"</p>
-                      <button onClick={() => { navigate("/emergency"); setShowNotif(false); }} className="w-full mt-1 py-1.5 rounded-lg text-[10px] font-bold text-white transition-all hover:scale-105" style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
-                        Lihat Detail
+                <div className="absolute top-full mt-3 right-0 w-80 rounded-2xl shadow-xl z-50 overflow-hidden" style={{ background: "#fff", border: `1px solid ${t.border}` }}>
+                  <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                    <p className="text-xs font-bold uppercase tracking-wide" style={{ color: t.dark }}>Notifikasi</p>
+                    {unreadCount > 0 && (
+                      <button onMouseDown={markAllRead} className="text-[11px] font-bold" style={{ color: t.active }}>
+                        Tandai semua dibaca
                       </button>
+                    )}
+                  </div>
+
+                  {notifPermission === "default" && (
+                    <button onMouseDown={() => void requestPermission()}
+                      className="mx-4 mb-2 w-[calc(100%-2rem)] rounded-xl px-3 py-2 text-left text-[11px] font-semibold flex items-center gap-2"
+                      style={{ background: t.soft, color: t.active }}>
+                      <Bell size={12} /> Aktifkan notifikasi browser agar tidak ketinggalan pengingat
+                    </button>
+                  )}
+
+                  {notifications.length > 0 ? (
+                    <div className="max-h-80 overflow-y-auto pb-2">
+                      {notifications.map(item => {
+                        const meta = NOTIF_META[item.kind];
+                        return (
+                          <button key={item.id}
+                            onMouseDown={() => {
+                              markRead(item.id);
+                              if (item.link) navigate(item.link);
+                              setShowNotif(false);
+                            }}
+                            className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50 transition-colors"
+                            style={{ background: item.read_at ? undefined : item.kind === "emergency" ? "#fef2f2" : t.soft }}>
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: meta.bg }}>
+                              <meta.Icon size={14} color={meta.color} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold leading-snug" style={{ color: item.kind === "emergency" ? "#b91c1c" : t.dark }}>{item.title}</p>
+                              {item.body && <p className="text-[11px] leading-snug mt-0.5" style={{ color: t.muted }}>{item.body}</p>}
+                              <p className="text-[10px] mt-1" style={{ color: t.muted }}>{timeAgo(item.created_at)}</p>
+                            </div>
+                            {!item.read_at && <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: item.kind === "emergency" ? "#ef4444" : t.active }} />}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-6">
                       <Bell size={24} color={t.muted} className="mx-auto mb-2 opacity-50" />
-                      <p className="text-xs" style={{ color: t.muted }}>Tidak ada notifikasi baru.</p>
+                      <p className="text-xs" style={{ color: t.muted }}>Belum ada notifikasi.</p>
                     </div>
                   )}
                 </div>
@@ -729,7 +901,7 @@ export default function App() {
               <button 
                 onClick={() => setShowProfile(!showProfile)}
                 onBlur={() => setTimeout(() => setShowProfile(false), 200)}
-                className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm hover:scale-105 transition-all shadow-sm focus:outline-none" 
+                className="ui-interactive w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm focus:outline-none" 
                 style={{ 
                   background: t.grad,
                   boxShadow: showProfile ? `0 0 0 3px ${t.shadow}` : "none"
@@ -806,13 +978,19 @@ export default function App() {
             fruit={fruit}
             trimester={trimester}
             motherName={userProfile.motherName}
+            fatherName={userProfile.fatherName}
+            motherPhone={userProfile.motherPhone ?? ""}
+            fatherPhone={userProfile.fatherPhone ?? ""}
+            hospital={userProfile.hospital}
+            doctor={userProfile.doctor}
             alert={alert}
-            onAck={handleAck}
-            onSetEta={handleSetEta}
+            onAck={ackAlert}
+            onResolveAlert={resolveAlert}
             onEmergency={() => navigate("/emergency")}
             onGoHealth={() => navigate("/health")}
+            onGoCalendar={() => navigate("/calendar")}
             onBack={() => navigate("/dashboard")}
-            onSendAlert={setAlert}
+            onSendAlert={sendAlert}
             vitalLogs={vitalLogs}
             onAddVital={addVital}
             vitDone={vitDone}
@@ -826,6 +1004,7 @@ export default function App() {
             onToggleSymptom={toggleSymptom}
             customSymptoms={customSymptoms}
             setCustomSymptoms={setCustomSymptoms}
+            trackers={trackers}
           />
         </div>
       </main>

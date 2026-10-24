@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+<defs><linearGradient id="kg" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#CD3A69"/><stop offset="1" stop-color="#7B5C9E"/></linearGradient>
+  <mask id="km"><rect width="120" height="120" fill="#fff"/>
+  <path d="M51 47 C54 64 66 77 86 77" fill="none" stroke="#000" stroke-width="6" stroke-linecap="round"/></mask></defs>
+  <g mask="url(#km)" fill="url(#kg)">
+  <circle cx="52" cy="21" r="11"/>
+  <path d="M47 37 C39 45 36 61 40 76 C43 88 41 100 38 110 L74 110 C76 102 78 98 82 94 C97 84 97 63 80 57 C72 54 68 49 65 42 C63 38 60 36 55 36 Z"/>
+  </g>
+</svg>

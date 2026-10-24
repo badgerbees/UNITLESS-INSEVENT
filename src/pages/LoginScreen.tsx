@@ -4,6 +4,7 @@ import { THEMES } from "../constants/theme";
 import { Mode } from "../types";
 import { Card } from "../components/Card";
 import { APP_NAME } from "../constants/brand";
+import logoIcon from "../assets/temanbunda-app-icon.svg";
 import { auth, type AuthForm } from "../services/auth";
 
 export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<{ message?: string } | void> }) {
@@ -28,10 +29,7 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
         <Card t={t} className="p-8 pb-10">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-white text-3xl mb-4 shadow-lg transition-colors duration-500"
-              style={{ background: t.grad }}>
-              {APP_NAME[0]}
-            </div>
+            <img src={logoIcon} alt={APP_NAME} className="w-16 h-16 mx-auto mb-4 rounded-2xl shadow-lg" />
             <p className="text-2xl font-extrabold" style={{ color: t.dark }}>
               {authView === "login" 
                 ? (loginMode === "mother" ? "Halo, Bunda!" : "Halo, Ayah!")
@@ -236,7 +234,7 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
                   setSubmitting(false);
                 }
               }}
-              className={`w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg transition-all hover:scale-[1.02] active:scale-95 ${authView === "register" ? "col-span-2 mt-4" : "mt-2"}`}
+              className={`w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg ui-interactive ${authView === "register" ? "col-span-2 mt-4" : "mt-2"}`}
               style={{ background: t.grad, boxShadow: `0 8px 24px ${t.shadow}`, opacity: submitting ? 0.7 : 1 }}>
               {authView === "login" ? "Masuk" : authView === "register" ? "Daftar Sekarang" : "Kirim Tautan"}
             </button>

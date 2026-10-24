@@ -3,13 +3,13 @@ FROM node:20-alpine AS base
 WORKDIR /app
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 
 FROM base AS development
 EXPOSE 5173
-CMD ["pnpm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["node", "./node_modules/vite/bin/vite.js", "--host", "0.0.0.0"]
 
 FROM base AS build
 ARG VITE_API_URL=/api

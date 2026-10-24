@@ -3,162 +3,56 @@
 @import './theme.css';
 @import './organ-anim.css';
 
-@layer base {
-  :root {
-    color-scheme: light;
+@layer components {
+  .ui-card {
+    transition: transform 220ms ease, box-shadow 220ms ease;
+    will-change: transform;
   }
 
-  button, a, input, textarea, select {
-    -webkit-tap-highlight-color: transparent;
+  .ui-card:hover {
+    transform: translateY(-3px);
   }
 
-  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
-    outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent);
-    outline-offset: 3px;
-  }
-}
-
-@keyframes page-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes soft-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-.app-content > * {
-  animation: page-enter 420ms ease both;
-}
-
-.ui-card {
-  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
-}
-
-.ui-card:hover {
-  transform: translateY(-3px);
-}
-
-.dashboard-hero {
-  position: relative;
-  isolation: isolate;
-  box-shadow: 0 14px 30px rgba(45, 45, 45, 0.08);
-  transition: transform 260ms ease, box-shadow 260ms ease;
-}
-
-.dashboard-hero::after {
-  content: "";
-  position: absolute;
-  width: 220px;
-  height: 220px;
-  right: 70px;
-  top: -110px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  z-index: -1;
-  pointer-events: none;
-}
-
-.dashboard-hero:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 36px rgba(45, 45, 45, 0.13);
-}
-
-.dashboard-fruit {
-  animation: soft-float 4s ease-in-out infinite;
-}
-
-.nav-item-active::before {
-  transform: scaleY(1);
-}
-
-.app-sidebar {
-  z-index: 30;
-}
-
-.app-sidebar nav button {
-  position: relative;
-  overflow: hidden;
-}
-
-.app-sidebar nav button::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: currentColor;
-  transform: scaleY(0);
-  transition: transform 180ms ease;
-}
-
-.app-sidebar nav button:hover::before {
-  transform: scaleY(0.55);
-}
-
-.app-sidebar nav button[style*="background"]::before {
-  transform: scaleY(1);
-}
-
-.mobile-menu-button {
-  display: none;
-}
-
-@media (max-width: 900px) {
-  .app-sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: min(280px, 86vw) !important;
-    transform: translateX(-105%);
-    box-shadow: 18px 0 45px rgba(45, 45, 45, 0.12);
-    transition: transform 260ms cubic-bezier(.22, 1, .36, 1);
+  .ui-interactive {
+    transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
   }
 
-  .app-sidebar.mobile-nav-open {
-    transform: translateX(0);
+  .ui-interactive:hover {
+    filter: brightness(1.015);
+    transform: translateY(-1px);
   }
 
-  .mobile-menu-button {
-    display: inline-flex;
+  .ui-interactive:active {
+    transform: translateY(1px) scale(0.985);
   }
 
-  .app-topbar {
-    padding-left: 1rem;
-    padding-right: 1rem;
+  .page-content {
+    animation: page-enter 360ms ease both;
   }
 
-  .app-content {
-    padding: 1rem;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-content .grid.grid-cols-4,
-  .app-content .grid.grid-cols-3 {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app-content .grid.grid-cols-5 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .app-topbar h1 {
-    font-size: 1rem;
-  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-card,
+    .ui-interactive,
+    .page-content {
+      animation: none;
+      transition: none;
+    }
 
-  .app-topbar > div:last-child > div:first-child {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    .ui-card:hover,
+    .ui-interactive:hover,
+    .ui-interactive:active {
+      transform: none;
+    }
   }
 }

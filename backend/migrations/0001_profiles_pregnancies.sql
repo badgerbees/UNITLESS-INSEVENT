@@ -18,7 +18,7 @@ create table if not exists public.pregnancies (
   blood_type text,
   hospital text,
   doctor text,
-  sync_code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)),
+  sync_code text not null unique default upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 6)),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

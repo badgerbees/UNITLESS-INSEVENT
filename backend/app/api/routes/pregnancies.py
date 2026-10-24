@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
+import secrets
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,12 @@ from app.api.routes.resources import seed_default_checklist
 
 
 router = APIRouter(prefix="/pregnancies")
+SYNC_CODE_TTL_MINUTES = 15
+SYNC_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def _new_sync_code() -> str:
+    return "".join(secrets.choice(SYNC_CODE_ALPHABET) for _ in range(6))
 
 
 @router.get("/current")
@@ -59,6 +66,8 @@ def create_pregnancy(
         "blood_type": payload.blood_type,
         "hospital": payload.hospital,
         "doctor": payload.doctor,
+        "sync_code": _new_sync_code(),
+        "sync_code_expires_at": (datetime.now(timezone.utc) + timedelta(minutes=SYNC_CODE_TTL_MINUTES)).isoformat(),
     }
 
     result = get_supabase_admin().table("pregnancies").insert(row).execute()
@@ -101,16 +110,20 @@ def pair_pregnancy(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     supabase = get_supabase_admin()
+    now = datetime.now(timezone.utc).isoformat()
     result = (
         supabase.table("pregnancies")
         .select("*")
         .eq("sync_code", payload.sync_code.strip().upper())
-        .single()
+        .is_("companion_id", "null")
+        .is_("sync_code_used_at", "null")
+        .gt("sync_code_expires_at", now)
+        .maybe_single()
         .execute()
     )
     pregnancy = result.data
     if not pregnancy:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sync code not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kode tidak ditemukan atau sudah kedaluwarsa")
     if pregnancy["mother_id"] == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The mother cannot pair with herself")
     if pregnancy.get("companion_id") not in (None, current_user.id):
@@ -118,13 +131,44 @@ def pair_pregnancy(
 
     paired = (
         supabase.table("pregnancies")
-        .update({"companion_id": current_user.id})
+        .update({"companion_id": current_user.id, "sync_code_used_at": now})
         .eq("id", pregnancy["id"])
+        .is_("companion_id", "null")
+        .is_("sync_code_used_at", "null")
         .select("*")
         .single()
         .execute()
     )
+    if not paired.data:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kode sudah digunakan oleh akun lain")
     return paired.data
+
+
+@router.post("/sync-code")
+def create_sync_code(current_user: CurrentUser = Depends(get_current_user)) -> dict:
+    current = _find_current(current_user)
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active pregnancy found")
+    if current["mother_id"] != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the mother can create a sync code")
+    if current.get("companion_id"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This pregnancy is already paired")
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=SYNC_CODE_TTL_MINUTES)
+    result = (
+        get_supabase_admin()
+        .table("pregnancies")
+        .update({
+            "sync_code": _new_sync_code(),
+            "sync_code_expires_at": expires_at.isoformat(),
+            "sync_code_used_at": None,
+        })
+        .eq("id", current["id"])
+        .select("*")
+        .single()
+        .execute()
+    )
+    return result.data
 
 
 @router.post("/unpair")
@@ -132,8 +176,8 @@ def unpair_pregnancy(current_user: CurrentUser = Depends(get_current_user)) -> d
     current = _find_current(current_user)
     if current is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active pregnancy found")
-    if current["companion_id"] != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the companion can unpair")
+    if current["companion_id"] != current_user.id and current["mother_id"] != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a member of the pregnancy can unpair")
 
     result = (
         get_supabase_admin()

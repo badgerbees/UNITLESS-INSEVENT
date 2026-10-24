@@ -51,6 +51,7 @@ export type UserProfile = {
   doctor: string;
   bloodType: string;
   syncCode: string;
+  syncCodeExpiresAt: string;
   notifVitamin: boolean;
   notifAnc: boolean;
   notifEmergencySound: boolean;

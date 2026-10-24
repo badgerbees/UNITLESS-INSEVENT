@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { api, ApiError } from "../services/api";
 import { DEFAULT_VITAMINS } from "../pages/HealthScreen";
-import type { CustomSymptom, EmergencyAlert, Risk, UserProfile, VitalLog, Vitamin } from "../types";
+import type { CustomSymptom, EmergencyAlert, Mode, Risk, UserProfile, VitalLog, Vitamin } from "../types";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -17,8 +17,9 @@ function saveJSON(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage tidak tersedia */ }
 }
 
-export function useAppData(user: User | null) {
+export function useAppData(user: User | null, mode: Mode) {
   const [hasPregnancy, setHasPregnancy] = useState<boolean | null>(null);
+  const [companionConnected, setCompanionConnected] = useState(false);
   const [alert, setAlert] = useState<EmergencyAlert | null>(null);
   const [vitalLogs, setVitalLogs] = useState<VitalLog[]>([]);
   const [vitDone, setVitDone] = useState<Record<string, boolean>>({});
@@ -35,6 +36,7 @@ export function useAppData(user: User | null) {
     doctor: "dr. Ratna, Sp.OG",
     bloodType: "A+",
     syncCode: "MELA-8821",
+    syncCodeExpiresAt: "",
     notifVitamin: true,
     notifAnc: true,
     notifEmergencySound: true,
@@ -57,6 +59,7 @@ export function useAppData(user: User | null) {
         const mother = memberResult?.members.find(member => member.role === "mother");
         const companion = memberResult?.members.find(member => member.role === "companion");
         setHasPregnancy(Boolean(pregnancy));
+        setCompanionConnected(Boolean(pregnancy?.companion_id));
         setUserProfile(previous => ({
           ...previous,
           motherName: mother?.full_name || (profile.role === "mother" ? profile.full_name || previous.motherName : previous.motherName),
@@ -68,6 +71,7 @@ export function useAppData(user: User | null) {
           doctor: pregnancy?.doctor || previous.doctor,
           bloodType: pregnancy?.blood_type || previous.bloodType,
           syncCode: pregnancy?.sync_code || previous.syncCode,
+          syncCodeExpiresAt: pregnancy?.sync_code_expires_at || previous.syncCodeExpiresAt,
           notifVitamin: profile.notif_vitamin,
           notifAnc: profile.notif_anc,
           notifEmergencySound: profile.notif_emergency_sound,
@@ -135,6 +139,13 @@ export function useAppData(user: User | null) {
       .catch(error => console.error("Failed to save symptom", error));
   }
 
+  async function unpairPregnancy() {
+    await api.unpairPregnancy();
+    setCompanionConnected(false);
+    setUserProfile(previous => ({ ...previous, syncCode: "", syncCodeExpiresAt: "" }));
+    if (mode === "companion") setHasPregnancy(false);
+  }
+
   async function saveVitamins(next: Vitamin[]) {
     const previous = vitamins;
     setVitamins(next);
@@ -159,9 +170,11 @@ export function useAppData(user: User | null) {
 
   return {
     hasPregnancy,
+    companionConnected,
     alert, setAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
     addVital, toggleVitamin, toggleSymptom, saveVitamins,
+    unpairPregnancy,
     handleAck: () => setAlert(previous => previous ? { ...previous, husbandAck: true } : null),
     handleSetEta: (minutes: number) => setAlert(previous => previous ? { ...previous, husbandEta: minutes } : null),
   };

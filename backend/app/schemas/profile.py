@@ -56,4 +56,6 @@ class PregnancyResponse(PregnancyCreate):
     companion_id: UUID | None = None
     due_date: date
     sync_code: str
+    sync_code_expires_at: datetime
+    sync_code_used_at: datetime | None = None
     created_at: datetime

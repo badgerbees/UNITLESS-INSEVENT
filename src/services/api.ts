@@ -64,6 +64,8 @@ export type Pregnancy = {
   hospital: string | null;
   doctor: string | null;
   sync_code: string;
+  sync_code_expires_at: string;
+  sync_code_used_at: string | null;
   created_at: string;
 };
 
@@ -131,6 +133,7 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ sync_code }),
   }),
+  createSyncCode: () => request<Pregnancy>("/pregnancies/sync-code", { method: "POST" }),
   unpairPregnancy: () => request<Pregnancy>("/pregnancies/unpair", { method: "POST" }),
   getVitals: () => request<VitalLog[]>("/health/vitals"),
   createVital: (payload: Omit<VitalLog, "id" | "recorded_at"> & { recorded_at?: string }) => request<VitalLog>("/health/vitals", {

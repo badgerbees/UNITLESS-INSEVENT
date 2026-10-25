@@ -1,7 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProfileResponse(BaseModel):
@@ -42,6 +42,21 @@ class PregnancyUpdate(BaseModel):
     blood_type: str | None = None
     hospital: str | None = None
     doctor: str | None = None
+    # null mengembalikan ke mode kehamilan (mis. tombol "Bayi Telah Lahir" tidak sengaja ditekan)
+    birth_at: datetime | None = None
+    postpartum_admin: dict[str, bool] | None = None
+
+    @field_validator("birth_at")
+    @classmethod
+    def birth_not_in_future(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return value
+        if value.tzinfo is None:
+            raise ValueError("birth_at must include a timezone")
+        # Toleransi 5 menit untuk selisih jam perangkat
+        if value > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise ValueError("birth_at cannot be in the future")
+        return value
 
 
 class PairPregnancyRequest(BaseModel):
@@ -58,4 +73,6 @@ class PregnancyResponse(PregnancyCreate):
     sync_code: str
     sync_code_expires_at: datetime
     sync_code_used_at: datetime | None = None
+    birth_at: datetime | None = None
+    postpartum_admin: dict[str, bool] = {}
     created_at: datetime

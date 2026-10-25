@@ -10,6 +10,48 @@ import { SectionTitle } from "../components/SectionTitle";
 import { PillBtn } from "../components/PillBtn";
 import { Card } from "../components/Card";
 import { fmtDate, getFruit } from "../utils/helpers";
+import { api, type CalendarEvent } from "../services/api";
+
+// Tanggal lokal (bukan UTC) agar jadwal hari ini tidak dianggap sudah lewat di pagi hari WIB
+function localIsoDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// Label & warna tipe acara, sama seperti di halaman Kalender
+const EVENT_TYPE: Record<CalendarEvent["event_type"], { label: string; color?: string }> = {
+  anc: { label: "ANC", color: "#14b8a6" },
+  vitamin: { label: "Vitamin", color: "#22c55e" },
+  hpl: { label: "HPL", color: "#f59e0b" },
+  other: { label: "Lainnya" },
+};
+
+function useNextEvent() {
+  const [state, setState] = useState<{ loading: boolean; event: CalendarEvent | null }>({ loading: true, event: null });
+  useEffect(() => {
+    let active = true;
+    const today = localIsoDate();
+    api.getCalendarEvents()
+      .then(events => {
+        const next = events
+          .filter(event => !event.completed && event.event_date >= today)
+          .sort((a, b) => a.event_date.localeCompare(b.event_date))[0] ?? null;
+        if (active) setState({ loading: false, event: next });
+      })
+      .catch(error => {
+        console.error("Failed to load next calendar event", error);
+        if (active) setState({ loading: false, event: null });
+      });
+    return () => { active = false; };
+  }, []);
+  return state;
+}
+
+function daysUntil(isoDate: string) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const today = new Date();
+  const diff = Math.round((new Date(y, m - 1, d).getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000);
+  return diff === 0 ? "Hari ini" : diff === 1 ? "Besok" : `${diff} hari lagi`;
+}
 
 
 // Rentang minggu kasar dari mulai terbentuk hingga matang, untuk bar estimasi kematangan
@@ -85,16 +127,19 @@ export function getOrganData(weeks: number) {
   ];
 }
 
-export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate, fruit, trimester, onEmergency, onGoHealth, vitDone, vitamins, symptoms, motherName }: {
+export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate, fruit, trimester, onEmergency, onGoHealth, onGoCalendar, vitDone, vitamins, symptoms, motherName }: {
   t: Theme; weeksPreg: number; daysExtra: number; daysUntilDue: number;
   dueDate: Date; fruit: ReturnType<typeof getFruit>; trimester: number;
-  onEmergency: () => void; onGoHealth: () => void;
+  onEmergency: () => void; onGoHealth: () => void; onGoCalendar: () => void;
   vitDone: Record<string, boolean>; vitamins: Vitamin[]; symptoms: Record<string, boolean>;
   motherName?: string;
 }) {
   const [activeChip, setActiveChip] = useState(0);
   const [showOrgans, setShowOrgans] = useState(false);
   const chips = getOrganData(weeksPreg);
+  const nextEvent = useNextEvent();
+  const eventDate = nextEvent.event ? new Date(`${nextEvent.event.event_date}T00:00:00`) : null;
+  const eventType = nextEvent.event ? EVENT_TYPE[nextEvent.event.event_type] : null;
 
   return (
     <div className="space-y-6 w-full">
@@ -116,12 +161,12 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
           <div className="flex gap-3 mt-5">
             <button
               onClick={() => { setShowOrgans(v => !v); setActiveChip(0); }}
-              className="rounded-full px-6 py-2.5 text-[13px] font-bold transition-all flex items-center gap-2"
+              className="ui-interactive rounded-full px-6 py-2.5 text-[13px] font-bold flex items-center gap-2"
               style={{ background: showOrgans ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.22)", color: "#fff" }}>
               {showOrgans ? "Tutup Perkembangan" : "Lihat Perkembangan"}
             </button>
             <button onClick={onEmergency}
-              className="rounded-full px-6 py-2.5 text-[13px] font-bold transition-all"
+              className="ui-interactive rounded-full px-6 py-2.5 text-[13px] font-bold"
               style={{ background: "rgba(255,255,255,0.12)", color: "#fff" }}>
               Darurat
             </button>
@@ -225,20 +270,50 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
               </li>
             ))}
           </ul>
-          <div className="mt-auto rounded-2xl p-4 flex items-center gap-4" style={{ background: t.soft }}>
+          <div onClick={onGoCalendar} role="link" tabIndex={0}
+            onKeyDown={e => { if (e.key === "Enter") onGoCalendar(); }}
+            className="mt-auto rounded-2xl p-4 flex items-center gap-4 cursor-pointer" style={{ background: t.soft }}>
             <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0" style={{ background: t.grad }}>
-              <span className="text-[10px] font-semibold leading-none uppercase">Jan</span>
-              <span className="text-xl font-extrabold leading-none mt-0.5">23</span>
+              {eventDate ? (
+                <>
+                  <span className="text-[10px] font-semibold leading-none uppercase">{eventDate.toLocaleDateString("id-ID", { month: "short" })}</span>
+                  <span className="text-xl font-extrabold leading-none mt-0.5">{eventDate.getDate()}</span>
+                </>
+              ) : (
+                <CalendarDays size={22} />
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <CalendarDays size={13} color={t.active} />
-                <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: t.active }}>ANC Berikutnya</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: t.active }}>Jadwal Berikutnya</p>
+                {eventType && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: eventType.color ?? t.primary }}>
+                    {eventType.label}
+                  </span>
+                )}
               </div>
-              <p className="text-sm font-bold" style={{ color: t.dark }}>Tes Diabetes Gestasional</p>
-              <p className="text-xs" style={{ color: t.muted }}>RSIA Bunda · Minggu 24–28</p>
+              {nextEvent.loading ? (
+                <p className="text-sm" style={{ color: t.muted }}>Memuat jadwal…</p>
+              ) : nextEvent.event && eventDate ? (
+                <>
+                  <p className="text-sm font-bold truncate" style={{ color: t.dark }}>{nextEvent.event.label}</p>
+                  <p className="text-xs truncate" style={{ color: t.muted }}>
+                    {daysUntil(nextEvent.event.event_date)} · {eventDate.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}
+                    {nextEvent.event.notes ? ` · ${nextEvent.event.notes}` : ""}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-bold" style={{ color: t.dark }}>Belum ada jadwal</p>
+                  <p className="text-xs" style={{ color: t.muted }}>Tambahkan jadwal kontrol atau acara di Kalender</p>
+                </>
+              )}
             </div>
-            <button className="text-xs font-bold px-4 py-2 rounded-full flex-shrink-0 bg-white" style={{ color: t.active }}>Detail</button>
+            <button onClick={e => { e.stopPropagation(); onGoCalendar(); }}
+              className="ui-interactive text-xs font-bold px-4 py-2 rounded-full flex-shrink-0 bg-white" style={{ color: t.active }}>
+              {!nextEvent.loading && !nextEvent.event ? "Tambah" : "Detail"}
+            </button>
           </div>
         </Card>
 
@@ -267,7 +342,7 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
               <div className="flex flex-col gap-3 flex-1">
                 {shortcuts.map(({ Icon, title, text, done, pct }) => (
                   <button key={title} onClick={onGoHealth}
-                    className="flex-1 flex flex-col justify-center rounded-2xl p-4 text-left transition-all hover:brightness-[0.98]"
+                    className="flex-1 flex flex-col justify-center rounded-2xl p-4 text-left"
                     style={{ background: done ? "#f0fdf4" : t.soft }}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -313,7 +388,7 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
               </div>
             ))}
           </div>
-          <button onClick={onGoHealth} className="mt-3 text-xs font-bold flex items-center justify-center gap-1 rounded-full py-2"
+          <button onClick={onGoHealth} className="ui-interactive mt-3 text-xs font-bold flex items-center justify-center gap-1 rounded-full py-2"
             style={{ background: t.soft, color: t.active }}>
             Lihat detail kesehatan <ChevronRight size={14} />
           </button>
@@ -323,11 +398,10 @@ export function MotherDashboard({ t, weeksPreg, daysExtra, daysUntilDue, dueDate
   );
 }
 
-export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, onSetEta, motherName }: {
+export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, motherName }: {
   t: Theme; weeksPreg: number; daysExtra: number;
   alert: EmergencyAlert | null;
-  onAck: () => void;
-  onSetEta: (eta: number) => void;
+  onAck: (eta: number) => void;
   motherName?: string;
 }) {
   const [paired, setPaired]       = useState(true);
@@ -338,16 +412,16 @@ export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, onSe
 
   useEffect(() => {
     if (!alert) return;
+    setSecondsAgo(Math.max(0, Math.floor((Date.now() - alert.sentAt.getTime()) / 1000)));
     const id = setInterval(() => {
-      setSecondsAgo(s => s + 1);
+      setSecondsAgo(Math.max(0, Math.floor((Date.now() - alert.sentAt.getTime()) / 1000)));
       if (tracking) setPingCount(p => p + 1);
     }, 1000);
     return () => clearInterval(id);
   }, [alert, tracking]);
 
   function handleAck(eta: number) {
-    onAck();
-    onSetEta(eta);
+    onAck(eta);
     setTracking(true);
   }
 
@@ -389,7 +463,7 @@ export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, onSe
             <Zap size={18} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-extrabold text-red-700">NOTIFIKASI DARURAT dari Bunda Sari</p>
+            <p className="text-sm font-extrabold text-red-700">NOTIFIKASI DARURAT dari {motherName || "Bunda"}</p>
             <p className="text-xs text-red-600 mt-0.5">"{alert.message}"</p>
             <p className="text-[10px] text-red-400 mt-0.5">
               {secondsAgo < 60 ? `${secondsAgo} detik yang lalu` : `${Math.floor(secondsAgo/60)} menit yang lalu`}
@@ -400,7 +474,7 @@ export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, onSe
             <div className="flex gap-2 flex-shrink-0">
               {[5, 10, 15].map(eta => (
                 <button key={eta} onClick={() => handleAck(eta)}
-                  className="px-3 py-1.5 rounded-full text-xs font-bold text-white"
+                  className="ui-interactive px-3 py-1.5 rounded-full text-xs font-bold text-white"
                   style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }}>
                   ~{eta} mnt
                 </button>
@@ -516,7 +590,7 @@ export function CompanionDashboard({ t, weeksPreg, daysExtra, alert, onAck, onSe
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   {[5, 10, 15, 20].map(eta => (
                     <button key={eta} onClick={() => handleAck(eta)}
-                      className="py-3 rounded-xl font-bold text-white transition-all hover:scale-105 text-sm"
+                      className="ui-interactive py-3 rounded-xl font-bold text-white text-sm"
                       style={{ background: t.grad }}>
                       ~{eta} menit
                     </button>

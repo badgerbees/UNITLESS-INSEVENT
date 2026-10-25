@@ -4,6 +4,7 @@ import { THEMES } from "../constants/theme";
 import { Mode } from "../types";
 import { Card } from "../components/Card";
 import { APP_NAME } from "../constants/brand";
+import logoIcon from "../assets/temanbunda-app-icon.svg";
 import { auth, type AuthForm } from "../services/auth";
 
 export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<{ message?: string } | void> }) {
@@ -16,7 +17,8 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const t = THEMES[loginMode];
+  // Peran hanya dipilih saat daftar; saat masuk, peran dibaca dari akun di server
+  const t = authView === "register" ? THEMES[loginMode] : THEMES.mother;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-500 relative overflow-hidden" style={{ background: t.bg }}>
@@ -28,13 +30,10 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
         <Card t={t} className="p-8 pb-10">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center font-extrabold text-white text-3xl mb-4 shadow-lg transition-colors duration-500"
-              style={{ background: t.grad }}>
-              {APP_NAME[0]}
-            </div>
+            <img src={logoIcon} alt={APP_NAME} className="w-16 h-16 mx-auto mb-4 rounded-2xl shadow-lg" />
             <p className="text-2xl font-extrabold" style={{ color: t.dark }}>
               {authView === "login" 
-                ? (loginMode === "mother" ? "Halo, Bunda!" : "Halo, Ayah!")
+                ? "Selamat datang kembali!"
                 : authView === "register" 
                 ? (loginMode === "mother" ? "Selamat datang, Bunda!" : "Selamat datang, Ayah!")
                 : "Atur Ulang Sandi"
@@ -42,7 +41,7 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
             </p>
             <p className="text-sm mt-1 px-2 leading-relaxed" style={{ color: t.muted }}>
               {authView === "login" 
-                ? (loginMode === "mother" ? "Senang melihat Anda kembali. Mari pantau si kecil hari ini." : "Siap mendampingi Bunda dan si kecil hari ini?")
+                ? "Masuk untuk lanjut memantau Bunda dan si kecil hari ini."
                 : authView === "register" 
                 ? (loginMode === "mother" ? `Mari mulai perjalanan indah keibuan Anda bersama ${APP_NAME}.` : "Mari bersiap jadi pendamping siaga yang hebat untuk Bunda.")
                 : "Masukkan email untuk tautan pemulihan sandi akun Anda."
@@ -50,8 +49,10 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
             </p>
           </div>
 
-          {/* Mode Toggle (only in login/register) */}
-          {authView !== "forgot" && (
+          {/* Pilihan peran hanya saat daftar; setelah itu peran akun tetap */}
+          {authView === "register" && (
+            <>
+            <p className="text-xs font-bold mb-1.5 ml-1" style={{ color: t.dark }}>Daftar sebagai</p>
             <div className="flex rounded-full p-1.5 gap-1 mb-8" style={{ background: "#f2f2f2" }}>
               {(["mother", "companion"] as Mode[]).map(m => (
               <button key={m} onClick={() => setLoginMode(m)}
@@ -66,6 +67,7 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
               </button>
               ))}
             </div>
+            </>
           )}
 
           {/* Form */}
@@ -236,7 +238,7 @@ export function LoginScreen({ onLogin }: { onLogin: (form: AuthForm) => Promise<
                   setSubmitting(false);
                 }
               }}
-              className={`w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg transition-all hover:scale-[1.02] active:scale-95 ${authView === "register" ? "col-span-2 mt-4" : "mt-2"}`}
+              className={`w-full py-4 rounded-2xl font-extrabold text-white text-base shadow-lg ui-interactive ${authView === "register" ? "col-span-2 mt-4" : "mt-2"}`}
               style={{ background: t.grad, boxShadow: `0 8px 24px ${t.shadow}`, opacity: submitting ? 0.7 : 1 }}>
               {authView === "login" ? "Masuk" : authView === "register" ? "Daftar Sekarang" : "Kirim Tautan"}
             </button>

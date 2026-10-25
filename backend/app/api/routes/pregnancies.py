@@ -58,6 +58,10 @@ def create_pregnancy(
     payload: PregnancyCreate,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
+    # Akun suami bergabung lewat kode sinkronisasi, bukan membuat kehamilan sendiri
+    if _profile_role(current_user) != "mother":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only mother accounts can create a pregnancy")
+
     row = {
         "id": str(uuid4()),
         "mother_id": current_user.id,
@@ -87,10 +91,11 @@ def update_current_pregnancy(
     if current["mother_id"] != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the mother can update pregnancy data")
 
-    updates = payload.model_dump(exclude_unset=True)
+    updates = payload.model_dump(exclude_unset=True, mode="json")
     if "hpht_date" in updates:
-        updates["hpht_date"] = updates["hpht_date"].isoformat()
         updates["due_date"] = (payload.hpht_date + timedelta(days=280)).isoformat()
+    if "postpartum_admin" in updates and updates["postpartum_admin"] is None:
+        updates["postpartum_admin"] = {}
 
     result = (
         get_supabase_admin()
@@ -109,6 +114,9 @@ def pair_pregnancy(
     payload: PairPregnancyRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
+    if _profile_role(current_user) != "companion":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only companion accounts can pair with a pregnancy")
+
     supabase = get_supabase_admin()
     now = datetime.now(timezone.utc).isoformat()
     result = (
@@ -189,6 +197,12 @@ def unpair_pregnancy(current_user: CurrentUser = Depends(get_current_user)) -> d
         .execute()
     )
     return result.data
+
+
+def _profile_role(current_user: CurrentUser) -> str | None:
+    """Peran akun dari profiles.role, ditetapkan saat daftar ('mother' atau 'companion')."""
+    result = get_supabase_admin().table("profiles").select("role").eq("id", current_user.id).limit(1).execute()
+    return result.data[0]["role"] if result.data else None
 
 
 def _find_current(current_user: CurrentUser) -> dict | None:

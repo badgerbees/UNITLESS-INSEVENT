@@ -10,6 +10,36 @@ export class ApiError extends Error {
   }
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  pregnancy_week: "Minggu kehamilan", blood_pressure: "Tekanan darah", weight: "Berat badan",
+  fundal_height: "Tinggi fundus", hemoglobin: "Hemoglobin", fetal_movement: "Gerakan janin", notes: "Catatan",
+  duration_seconds: "Durasi", gap_minutes: "Jarak kontraksi", kick_count: "Jumlah gerakan",
+};
+
+// Error validasi FastAPI berupa daftar {loc, msg}; ubah jadi kalimat yang bisa dibaca user
+function formatValidationErrors(details: { loc?: (string | number)[]; msg?: string; ctx?: { le?: number; ge?: number } }[]) {
+  return details.map(d => {
+    const field = String(d.loc?.[d.loc.length - 1] ?? "");
+    const label = FIELD_LABELS[field] ?? field;
+    if (d.ctx?.le !== undefined) return `${label} maksimal ${d.ctx.le}`;
+    if (d.ctx?.ge !== undefined) return `${label} minimal ${d.ctx.ge}`;
+    return `${label} tidak valid`;
+  }).join(", ");
+}
+
+// Pesan error yang ramah untuk ditampilkan ke user
+export function friendlyError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Sesi login berakhir. Silakan keluar lalu login ulang.";
+    if (error.status === 403) return "Hanya akun ibu yang bisa menyimpan data ini.";
+    if (error.status === 422) return `Data ditolak server: ${error.message}.`;
+    if (error.status >= 500) return "Server sedang bermasalah. Coba lagi beberapa saat lagi.";
+    return error.message;
+  }
+  if (error instanceof TypeError) return "Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.";
+  return "Terjadi kesalahan. Coba lagi.";
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_URL) {
     throw new Error("VITE_API_URL is required in production.");
@@ -30,7 +60,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let message = "API request failed";
     try {
       const body = await response.json();
-      message = body.detail || message;
+      message = Array.isArray(body.detail) ? formatValidationErrors(body.detail) : body.detail || message;
     } catch {
       // Keep the generic error when the response is not JSON.
     }
@@ -66,6 +96,8 @@ export type Pregnancy = {
   sync_code: string;
   sync_code_expires_at: string;
   sync_code_used_at: string | null;
+  birth_at?: string | null;
+  postpartum_admin?: Record<string, boolean>;
   created_at: string;
 };
 
@@ -99,6 +131,32 @@ export type ReportSummary = {
   weeks_recorded: number[];
 };
 
+export type KickSession = { id: string; started_at: string; ended_at: string | null; kick_count: number };
+export type ContractionSession = { id: string; started_at: string; ended_at: string; duration_seconds: number; gap_minutes: number | null };
+
+export type AppNotification = {
+  id: string;
+  kind: "emergency" | "emergency_ack" | "emergency_resolved" | "vitamin" | "anc" | "weekly_report" | "info";
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+export type EmergencyAlertRow = {
+  id: string;
+  pregnancy_id: string;
+  trigger: "manual" | "511" | "symptom";
+  message: string;
+  location: string | null;
+  lat: number | null;
+  lng: number | null;
+  acknowledged_at: string | null;
+  eta_minutes: number | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
 export const api = {
   getMe: () => request<Profile>("/me"),
   updateMe: (payload: { full_name?: string | null; phone?: string | null }) => request<Profile>("/me", {
@@ -125,6 +183,8 @@ export const api = {
     blood_type?: string;
     hospital?: string;
     doctor?: string;
+    birth_at?: string | null;
+    postpartum_admin?: Record<string, boolean>;
   }) => request<Pregnancy>("/pregnancies/current", {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -161,6 +221,8 @@ export const api = {
     body: JSON.stringify({ completed_on }),
   }),
   unlogVitamin: (id: string, day?: string) => request<void>(`/health/vitamins/${id}/logs${day ? `?day=${encodeURIComponent(day)}` : ""}`, { method: "DELETE" }),
+  getKickSessions: () => request<KickSession[]>("/health/kick-sessions"),
+  getContractionSessions: () => request<ContractionSession[]>("/health/contraction-sessions"),
   createKickSession: (payload: { started_at: string; ended_at?: string; kick_count: number }) => request("/health/kick-sessions", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -200,5 +262,18 @@ export const api = {
   }),
   getReportSummary: () => request<ReportSummary>("/reports/summary"),
   getReportVitals: () => request<VitalLog[]>("/reports/vitals"),
-  exportReport: () => request<{ generated_at: string; pregnancy: Pregnancy; summary: ReportSummary; vitals: VitalLog[] }>("/reports/export"),
+  getNotifications: () => request<AppNotification[]>("/notifications"),
+  markNotificationRead: (id: string) => request<AppNotification>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => request<void>("/notifications/read-all", { method: "POST" }),
+  getActiveEmergency: () => request<EmergencyAlertRow | null>("/emergency/alerts/active"),
+  sendEmergency: (payload: { message: string; trigger?: EmergencyAlertRow["trigger"]; location?: string | null; lat?: number | null; lng?: number | null }) => request<EmergencyAlertRow & { companion_notified: boolean }>("/emergency/alerts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  ackEmergency: (id: string, eta_minutes: number | null) => request<EmergencyAlertRow>(`/emergency/alerts/${id}/ack`, {
+    method: "POST",
+    body: JSON.stringify({ eta_minutes }),
+  }),
+  resolveEmergency: (id: string) => request<EmergencyAlertRow>(`/emergency/alerts/${id}/resolve`, { method: "POST" }),
+  exportReport: () =>request<{ generated_at: string; pregnancy: Pregnancy; summary: ReportSummary; vitals: VitalLog[] }>("/reports/export"),
 };

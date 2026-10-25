@@ -227,19 +227,20 @@ function SettingsModal({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold mb-1.5" style={{ color: t.dark }}>Tanggal HPHT (Hari Pertama Haid Terakhir)</label>
+                    <label className="block text-xs font-bold mb-1.5" style={{ color: t.dark }}>Tanggal HPHT</label>
                     <input
                       type="date"
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none border transition-all bg-white"
+                      className="w-full h-11 rounded-xl px-4 text-sm outline-none border transition-all bg-white"
                       style={{ borderColor: t.border, color: t.dark }}
                       value={formData.hphtDate}
                       onChange={(e) => setFormData({ ...formData, hphtDate: e.target.value })}
                     />
+                    <p className="text-[10px] mt-1 px-1" style={{ color: t.muted }}>Hari pertama haid terakhir</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold mb-1.5" style={{ color: t.dark }}>Golongan Darah Ibu</label>
                     <select
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none border transition-all bg-white"
+                      className="w-full h-11 rounded-xl px-4 text-sm outline-none border transition-all bg-white"
                       style={{ borderColor: t.border, color: t.dark }}
                       value={formData.bloodType}
                       onChange={(e) => setFormData({ ...formData, bloodType: e.target.value })}
@@ -253,7 +254,7 @@ function SettingsModal({
                     <label className="block text-xs font-bold mb-1.5" style={{ color: t.dark }}>Rumah Sakit / Klinik Rujukan</label>
                     <input
                       type="text"
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none border transition-all"
+                      className="w-full h-11 rounded-xl px-4 text-sm outline-none border transition-all"
                       style={{ borderColor: t.border, background: "#fafafa", color: t.dark }}
                       value={formData.hospital}
                       onChange={(e) => setFormData({ ...formData, hospital: e.target.value })}
@@ -263,7 +264,7 @@ function SettingsModal({
                     <label className="block text-xs font-bold mb-1.5" style={{ color: t.dark }}>Dokter Kandungan (Sp.OG)</label>
                     <input
                       type="text"
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none border transition-all"
+                      className="w-full h-11 rounded-xl px-4 text-sm outline-none border transition-all"
                       style={{ borderColor: t.border, background: "#fafafa", color: t.dark }}
                       value={formData.doctor}
                       onChange={(e) => setFormData({ ...formData, doctor: e.target.value })}
@@ -455,11 +456,6 @@ function timeAgo(iso: string) {
 
 export default function App() {
   const { user, loading: authLoading } = useAuth();
-  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("appMode") as Mode) || "mother");
-
-  useEffect(() => {
-    localStorage.setItem("appMode", mode);
-  }, [mode]);
   const location = useLocation();
   const navigate = useNavigate();
   const screen = location.pathname.substring(1) || "dashboard";
@@ -477,15 +473,18 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const {
-    hasPregnancy, loadError, retryLoad, alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
+    role, hasPregnancy, loadError, retryLoad, alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
     addVital, toggleVitamin, toggleSymptom, saveVitamins,
+    birthAt, postpartumAdmin, confirmBirth, cancelBirth, togglePostpartumAdmin,
   } = useAppData(user);
   const {
     notifications, unreadCount, permission: notifPermission, requestPermission, markRead, markAllRead,
   } = useNotifications(user, { sound: userProfile.notifEmergencySound, onOpen: link => navigate(link) });
   const trackers = useTrackers(user);
 
+  // Tampilan Ibu/Suami mengikuti peran akun di server; tidak bisa diganti dari aplikasi
+  const mode: Mode = role ?? "mother";
   const t = THEMES[mode];
 
   const hpht         = new Date(userProfile.hphtDate || "2024-12-01");
@@ -497,6 +496,9 @@ export default function App() {
   const daysUntilDue = Math.max(0, Math.floor((dueDate.getTime() - today.getTime()) / 86400000));
   const fruit        = getFruit(weeksPreg);
   const trimester    = weeksPreg < 13 ? 1 : weeksPreg < 27 ? 2 : 3;
+  const isPostpartum = birthAt != null;
+  const babyAgeDays  = birthAt ? Math.max(0, Math.floor((today.getTime() - birthAt.getTime()) / 86400000)) : 0;
+  const babyAgeLabel = babyAgeDays < 14 ? `${babyAgeDays} hari` : `${Math.floor(babyAgeDays / 7)} minggu`;
 
   const screenLabel: Record<Screen, string> = {
     dashboard:  mode === "mother" ? "Dashboard Ibu" : "Dashboard Suami",
@@ -513,7 +515,10 @@ export default function App() {
     { id: "health"    as Screen, label: "Kesehatan", Icon: Activity },
     { id: "calendar"  as Screen, label: "Kalender",  Icon: Calendar },
     { id: "reports"   as Screen, label: "Laporan",   Icon: FileText },
-    { id: "resources" as Screen, label: "Persiapan", Icon: Package  },
+    // Setelah bayi lahir, Persiapan diganti Pasca-Melahirkan (halaman Persiapan tetap bisa dibuka lewat pencarian)
+    isPostpartum
+      ? { id: "postpartum" as Screen, label: "Pasca-Melahirkan", Icon: Baby }
+      : { id: "resources"  as Screen, label: "Persiapan",        Icon: Package },
   ];
 
   if (authLoading) {
@@ -522,7 +527,6 @@ export default function App() {
 
   if (!user) {
     const handleLogin = async (form: AuthForm): Promise<{ message?: string }> => {
-      setMode(form.mode);
       if (form.view === "register") {
         const result = await auth.signUp(form.email, form.password, form.name, form.mode);
         if (result.error) throw result.error;
@@ -619,30 +623,19 @@ export default function App() {
           </div>
         )}
 
-        {/* Mode toggle */}
+        {/* Penanda peran akun (bukan tombol): peran ditetapkan saat daftar */}
         <div className={`mb-5 flex-shrink-0 ${collapsed ? "px-0 flex justify-center" : "px-4"}`}>
           {collapsed ? (
-            <button onClick={() => setMode(mode === "mother" ? "companion" : "mother")}
-              title={mode === "mother" ? "Mode Ibu — klik untuk ganti ke Mode Suami" : "Mode Suami — klik untuk ganti ke Mode Ibu"}
-              className="ui-interactive w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: t.grad, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
+            <span title={mode === "mother" ? "Akun Ibu" : "Akun Suami"}
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: t.soft }}
             >
-              {mode === "mother" ? <Heart size={16} color="#fff" /> : <Users size={16} color="#fff" />}
-            </button>
+              {mode === "mother" ? <Heart size={16} color={t.active} /> : <Users size={16} color={t.active} />}
+            </span>
           ) : (
-            <div className="flex rounded-full p-1 gap-1" style={{ background: "#f2f2f2" }}>
-              {(["mother", "companion"] as Mode[]).map(m => (
-                <button key={m} onClick={() => setMode(m)}
-                  className="flex-1 py-2 rounded-full text-[12px] font-bold transition-all flex items-center justify-center gap-1"
-                  style={{
-                    background: mode === m ? THEMES[m].grad : "transparent",
-                    color: mode === m ? "#fff" : "#999",
-                    boxShadow: mode === m ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
-                  }}
-                >
-                  {m === "mother" ? "Ibu" : "Suami"}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 rounded-full px-4 py-2" style={{ background: t.soft }}>
+              {mode === "mother" ? <Heart size={14} color={t.active} /> : <Users size={14} color={t.active} />}
+              <span className="text-[12px] font-bold" style={{ color: t.active }}>{mode === "mother" ? "Akun Ibu" : "Akun Suami"}</span>
             </div>
           )}
         </div>
@@ -679,10 +672,10 @@ export default function App() {
         </nav>
 
         {/* Pivot Mode — versi ringkas saat sidebar diperkecil */}
-        {mode === "mother" && collapsed && (
+        {mode === "mother" && !isPostpartum && collapsed && (
           <div className="pb-4 flex-shrink-0 flex justify-center">
             <button onClick={() => navigate("/postpartum")}
-              title="Bayi Telah Lahir? Beralih ke mode pasca-melahirkan"
+              title="Bayi Telah Lahir? Si Kecil Sudah Hadir — catat waktu lahir si kecil"
               className="ui-interactive w-10 h-10 rounded-full flex items-center justify-center"
               style={{ background: t.soft, border: `1.5px solid ${t.border}` }}
             >
@@ -692,7 +685,7 @@ export default function App() {
         )}
 
         {/* Pivot Mode Card */}
-        {mode === "mother" && !collapsed && (
+        {mode === "mother" && !isPostpartum && !collapsed && (
           <div className="px-4 pb-4 flex-shrink-0">
             <div onClick={() => navigate("/postpartum")}
               className="rounded-2xl p-3 flex flex-col gap-2.5 cursor-pointer relative overflow-hidden"
@@ -704,12 +697,12 @@ export default function App() {
                 </div>
                 <div>
                   <p className="text-[12px] font-extrabold leading-tight" style={{ color: t.dark }}>Bayi Telah Lahir?</p>
-                  <p className="text-[10px]" style={{ color: t.muted }}>Beralih ke mode pasca</p>
+                  <p className="text-[10px]" style={{ color: t.muted }}>Catat waktu lahir si kecil</p>
                 </div>
               </div>
               <button className="ui-interactive w-full py-1.5 rounded-xl text-[11px] font-bold text-white"
                 style={{ background: t.grad }}>
-                Pivot Mode
+                Si Kecil Sudah Hadir
               </button>
             </div>
           </div>
@@ -729,7 +722,7 @@ export default function App() {
               {screen === "dashboard" ? APP_NAME : screenLabel[screen as Screen]}
             </h1>
             <p className="text-xs mt-0.5" style={{ color: t.muted }}>
-              {fmtDate(today)}{screen !== "dashboard" && ` · Kehamilan minggu ${weeksPreg}+${daysExtra}`}
+              {fmtDate(today)}{screen !== "dashboard" && (isPostpartum ? ` · Bayi usia ${babyAgeLabel}` : ` · Kehamilan minggu ${weeksPreg}+${daysExtra}`)}
             </p>
           </div>
           <div className="flex items-center gap-3 relative">
@@ -1005,6 +998,11 @@ export default function App() {
             customSymptoms={customSymptoms}
             setCustomSymptoms={setCustomSymptoms}
             trackers={trackers}
+            birthAt={birthAt}
+            postpartumAdmin={postpartumAdmin}
+            onConfirmBirth={confirmBirth}
+            onCancelBirth={cancelBirth}
+            onTogglePostpartumAdmin={togglePostpartumAdmin}
           />
         </div>
       </main>

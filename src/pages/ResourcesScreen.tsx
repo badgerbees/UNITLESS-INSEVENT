@@ -10,7 +10,7 @@ import {
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
   PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
-  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
+  User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle, Pencil
 } from "lucide-react";
 import { APP_NAME } from "../constants/brand";
 import { api, ApiError } from "../services/api";
@@ -151,6 +151,17 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
 
   const [editMode, setEditMode] = useState(false);
   const [newInputs, setNewInputs] = useState<Record<string, string>>({});
+  const [addingCat, setAddingCat] = useState<string | null>(null);
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+  // Nilai terbaru untuk dibaca dari callback API yang selesai belakangan
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const catsRef = useRef(cats);
+  catsRef.current = cats;
+  // Hapus ditunda beberapa detik agar bisa diurungkan lewat toast
+  const [pendingDelete, setPendingDelete] = useState<{ catId: string; item: { id: string; l: string }; index: number } | null>(null);
+  const pendingDeleteRef = useRef<typeof pendingDelete>(null);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -204,6 +215,9 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
     return () => { active = false; };
   }, []);
 
+  // Saat halaman ditinggal, hapus yang masih tertunda langsung dikirim
+  useEffect(() => () => commitPendingDelete(), []);
+
   if (loading) {
     return (
       <div className="w-full rounded-3xl p-10 text-center" style={{ background: t.card, border: `1px solid ${t.border}` }}>
@@ -225,17 +239,83 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
   function handleAddItem(catId: string) {
     const val = newInputs[catId]?.trim();
     if (!val) return;
-    const newId = `custom_${Date.now()}`;
-    setCats(prev => prev.map(c => c.id === catId ? { ...c, items: [...c.items, { id: newId, l: val }] } : c));
-    setItems(p => ({ ...p, [newId]: false }));
+    const tempId = `custom_${Date.now()}`;
+    const position = cats.find(c => c.id === catId)?.items.length ?? 0;
+    setCats(prev => prev.map(c => c.id === catId ? { ...c, items: [...c.items, { id: tempId, l: val }] } : c));
+    setItems(p => ({ ...p, [tempId]: false }));
+    setNewInputs(p => ({ ...p, [catId]: "" }));
+    setAddErrors(p => ({ ...p, [catId]: "" }));
+
+    api.createChecklistItem({ category_id: catId, label: val, position })
+      .then(created => {
+        const swap = (i: { id: string; l: string }) => i.id === tempId ? { id: created.id, l: created.label } : i;
+        const stillListed = catsRef.current.some(c => c.items.some(i => i.id === tempId));
+        const completed = !!itemsRef.current[tempId];
+        setCats(prev => prev.map(c => ({ ...c, items: c.items.map(swap) })));
+        setItems(prev => {
+          const { [tempId]: _, ...rest } = prev;
+          return { ...rest, [created.id]: completed };
+        });
+        // Item sementara sudah diubah sebelum server merespons: samakan dengan server
+        if (pendingDeleteRef.current?.item.id === tempId) {
+          pendingDeleteRef.current = { ...pendingDeleteRef.current, item: swap(pendingDeleteRef.current.item) };
+          setPendingDelete(pendingDeleteRef.current);
+        } else if (!stillListed) {
+          void api.deleteChecklistItem(created.id).catch(error => console.error("Failed to delete checklist item", error));
+        } else if (completed) {
+          void api.updateChecklistItem(created.id, { completed }).catch(error => console.error("Failed to update checklist item", error));
+        }
+      })
+      .catch(error => {
+        console.error("Failed to create checklist item", error);
+        setCats(prev => prev.map(c => ({ ...c, items: c.items.filter(i => i.id !== tempId) })));
+        setNewInputs(p => ({ ...p, [catId]: p[catId] || val }));
+        setAddingCat(catId);
+        setAddErrors(p => ({ ...p, [catId]: "Gagal menyimpan item. Coba lagi." }));
+      });
+  }
+
+  function closeAddInput(catId: string) {
+    setAddingCat(current => current === catId ? null : current);
     setNewInputs(p => ({ ...p, [catId]: "" }));
   }
 
-  function handleDelete(catId: string, itemId: string) {
-    setCats(prev => prev.map(c => c.id === catId ? { ...c, items: c.items.filter(i => i.id !== itemId) } : c));
-    if (!itemId.startsWith("custom_")) {
-      void api.deleteChecklistItem(itemId).catch(error => console.error("Failed to delete checklist item", error));
+  function commitPendingDelete() {
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    deleteTimerRef.current = null;
+    const pending = pendingDeleteRef.current;
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    if (pending && !pending.item.id.startsWith("custom_")) {
+      void api.deleteChecklistItem(pending.item.id).catch(error => console.error("Failed to delete checklist item", error));
     }
+  }
+
+  function handleDelete(catId: string, itemId: string) {
+    const cat = cats.find(c => c.id === catId);
+    const index = cat ? cat.items.findIndex(i => i.id === itemId) : -1;
+    if (!cat || index < 0) return;
+    commitPendingDelete();
+    const pending = { catId, item: cat.items[index], index };
+    pendingDeleteRef.current = pending;
+    setPendingDelete(pending);
+    setCats(prev => prev.map(c => c.id === catId ? { ...c, items: c.items.filter(i => i.id !== itemId) } : c));
+    deleteTimerRef.current = setTimeout(commitPendingDelete, 5000);
+  }
+
+  function undoDelete() {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    deleteTimerRef.current = null;
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    setCats(prev => prev.map(c => {
+      if (c.id !== pending.catId) return c;
+      const next = [...c.items];
+      next.splice(Math.min(pending.index, next.length), 0, pending.item);
+      return { ...c, items: next };
+    }));
   }
 
   function toggleChecklistItem(id: string) {
@@ -281,66 +361,104 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
       </div>
 
       <div className="flex items-center justify-between px-1">
-        <p className="text-sm font-extrabold" style={{ color: t.dark }}>Daftar Bawaan per Kategori</p>
+        <SectionTitle className="">Daftar Bawaan per Kategori</SectionTitle>
         <button onClick={() => setEditMode(!editMode)}
           className="ui-interactive flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
           style={{ background: editMode ? t.active : t.soft, color: editMode ? "#fff" : t.active }}>
-          {editMode ? <Check size={12} /> : <Plus size={12} />} {editMode ? "Selesai Edit" : "Edit List"}
+          {editMode ? <Check size={12} /> : <Pencil size={12} />} {editMode ? "Selesai" : "Edit"}
         </button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
         {cats.map(cat => (
           <Card key={cat.id} t={t} className="p-5 flex flex-col">
-            <p className="text-xs font-bold mb-3 uppercase tracking-wide" style={{ color: t.dark }}>{cat.label}</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: t.dark }}>{cat.label}</p>
+              {cat.items.length > 0 && (() => {
+                const done = cat.items.filter(i => items[i.id]).length;
+                const complete = done === cat.items.length;
+                return (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: complete ? "#dcfce7" : "#f3f1f4", color: complete ? "#15803d" : t.muted }}>
+                    {done}/{cat.items.length}
+                  </span>
+                );
+              })()}
+            </div>
             <div className="space-y-2 flex-1">
-              {cat.items.map(({ id, l }) => (
+              {/* Yang belum dicentang tampil di atas */}
+              {[...cat.items].sort((a, b) => Number(!!items[a.id]) - Number(!!items[b.id])).map(({ id, l }) => (
                 <div key={id} className="flex items-center gap-2">
-                  <button onClick={() => toggleChecklistItem(id)}
-                    className="flex-1 flex items-center gap-2 rounded-xl px-2 py-2"
-                    style={{ background: items[id] ? "#f0fdf4" : t.soft }}>
-                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0" style={{ background: items[id] ? "#22c55e" : t.border }}>
-                      {items[id] && <Check size={10} className="text-white" />}
+                  <button onClick={() => toggleChecklistItem(id)} disabled={editMode}
+                    className={`flex-1 flex items-center gap-2 rounded-lg px-2.5 py-2 transition-colors ${editMode ? "cursor-default" : "hover:bg-black/[0.03]"}`}
+                    style={{ background: items[id] ? "#f0fdf4" : t.soft, opacity: items[id] ? 0.7 : 1 }}>
+                    <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                      style={{ background: items[id] ? "#22c55e" : "#fff", border: `1.5px solid ${items[id] ? "#22c55e" : t.primary}` }}>
+                      {items[id] && <Check size={10} className="text-white" strokeWidth={3} />}
                     </div>
-                    <span className="text-xs text-left leading-tight" style={{ color: items[id] ? "#22c55e" : t.dark, textDecoration: items[id] ? "line-through" : "none" }}>{l}</span>
+                    <span className="text-xs text-left leading-tight" style={{ color: items[id] ? "#15803d" : t.dark }}>{l}</span>
                   </button>
                   {editMode && (
-                    <button onClick={() => handleDelete(cat.id, id)}
-                      className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:bg-red-100"
-                      style={{ color: "#ef4444", background: t.soft }}>
-                      <X size={12} />
+                    <button onClick={() => handleDelete(cat.id, id)} aria-label={`Hapus ${l}`}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors text-gray-400 hover:text-red-500 hover:bg-red-50">
+                      <X size={14} />
                     </button>
                   )}
                 </div>
               ))}
             </div>
-            
-            {editMode && (
-              <div className="mt-3 pt-3 flex gap-2" style={{ borderTop: `1px solid ${t.border}` }}>
+
+            {addingCat === cat.id ? (
+              <div className="mt-2 flex gap-2">
                 <input
-                  className="flex-1 w-full rounded-xl px-3 py-2 text-xs outline-none border-2 transition-all min-w-0"
-                  style={{ borderColor: t.border, background: t.card, color: t.dark }}
-                  placeholder="Tambah..."
+                  autoFocus
+                  className="flex-1 w-full rounded-lg px-3 py-2 text-xs outline-none border-2 transition-all min-w-0"
+                  style={{ borderColor: t.primary, background: t.card, color: t.dark }}
+                  placeholder="Nama item, lalu Enter"
                   value={newInputs[cat.id] || ""}
                   onChange={e => setNewInputs(p => ({ ...p, [cat.id]: e.target.value }))}
-                  onKeyDown={e => e.key === 'Enter' && handleAddItem(cat.id)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleAddItem(cat.id);
+                    if (e.key === "Escape") closeAddInput(cat.id);
+                  }}
+                  onBlur={() => { if (!newInputs[cat.id]?.trim()) closeAddInput(cat.id); }}
                 />
-                <button onClick={() => handleAddItem(cat.id)}
-                  className="ui-interactive w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                <button onMouseDown={e => e.preventDefault()} onClick={() => handleAddItem(cat.id)}
+                  disabled={!newInputs[cat.id]?.trim()} aria-label="Tambah item"
+                  className="ui-interactive w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                   style={{ background: newInputs[cat.id]?.trim() ? t.active : t.soft, color: newInputs[cat.id]?.trim() ? "#fff" : t.muted }}>
                   <Plus size={14} />
                 </button>
               </div>
+            ) : (
+              <button onClick={() => setAddingCat(cat.id)}
+                className="ui-interactive mt-2 w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-colors hover:bg-black/[0.03]"
+                style={{ color: t.active, border: `1.5px dashed ${t.primary}` }}>
+                <Plus size={13} /> Tambah item
+              </button>
+            )}
+            {addErrors[cat.id] && (
+              <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{addErrors[cat.id]}</p>
             )}
           </Card>
         ))}
       </div>
 
+      {pendingDelete && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-full pl-5 pr-2 py-2 shadow-xl text-xs text-white"
+          style={{ background: "#2d2a32" }} role="status">
+          <span>“{pendingDelete.item.l}” dihapus</span>
+          <button onClick={undoDelete} className="rounded-full px-3 py-1.5 font-bold hover:bg-white/10" style={{ color: t.primary }}>
+            Urungkan
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 mt-2">
         {/* Rencana Persalinan (Birth Plan) */}
         <Card t={t} className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <SectionTitle>Rencana Persalinan (Birth Plan)</SectionTitle>
+            <SectionTitle className="">Rencana Persalinan (Birth Plan)</SectionTitle>
             <button onClick={printBirthPlan} className="ui-interactive flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full" style={{ background: t.soft, color: t.active }}>
               <Printer size={12} /> Cetak
             </button>
@@ -363,7 +481,8 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
                   <p className="text-[13px] font-bold" style={{ color: t.dark }}>{bp.label}</p>
                   <p className="text-[10px]" style={{ color: t.muted }}>{bp.sub}</p>
                 </div>
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${birthPlan[bp.id] ? 'bg-green-500' : 'bg-gray-200'}`}>
+                <div className="w-5 h-5 rounded-full flex items-center justify-center transition-all"
+                  style={{ background: birthPlan[bp.id] ? "#22c55e" : "#fff", border: `1.5px solid ${birthPlan[bp.id] ? "#22c55e" : "#c9c2cc"}` }}>
                   {birthPlan[bp.id] && <Check size={12} className="text-white" />}
                 </div>
               </button>

@@ -5,7 +5,7 @@ import { getSupabaseClient } from "../lib/supabase";
 import { auth } from "../services/auth";
 import { useToday } from "../hooks/useToday";
 import { DEFAULT_VITAMINS } from "../pages/HealthScreen";
-import type { CustomSymptom, EmergencyAlert, Risk, UserProfile, VitalLog, Vitamin } from "../types";
+import type { CustomSymptom, EmergencyAlert, Mode, Risk, UserProfile, VitalLog, Vitamin } from "../types";
 
 function loadJSON<T>(key: string, fallback: T): T {
   try {
@@ -52,12 +52,17 @@ function toEmergencyAlert(row: EmergencyAlertRow | null): EmergencyAlert | null 
 
 export function useAppData(user: User | null) {
   const [hasPregnancy, setHasPregnancy] = useState<boolean | null>(null);
+  // Peran akun dari profiles.role (dipilih saat daftar); menentukan tampilan Ibu atau Suami
+  const [role, setRole] = useState<Mode | null>(null);
   // Tanggal lokal user dikirim ke server agar "hari ini" mengikuti WIB, bukan jam UTC server
   const today = useToday();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [pregnancyId, setPregnancyId] = useState<string | null>(null);
   const [alert, setAlert] = useState<EmergencyAlert | null>(null);
+  // Mode pasca-melahirkan: aktif bila waktu lahir sudah tersimpan di server
+  const [birthAt, setBirthAt] = useState<Date | null>(null);
+  const [postpartumAdmin, setPostpartumAdmin] = useState<Record<string, boolean>>({});
   const [vitalLogs, setVitalLogs] = useState<VitalLog[]>([]);
   const [vitDone, setVitDone] = useState<Record<string, boolean>>({});
   const [symptoms, setSymptoms] = useState<Record<string, boolean>>({});
@@ -83,7 +88,7 @@ export function useAppData(user: User | null) {
   useEffect(() => { saveJSON("customSymptoms", customSymptoms); }, [customSymptoms]);
 
   useEffect(() => {
-    if (!user) { setHasPregnancy(null); return; }
+    if (!user) { setHasPregnancy(null); setRole(null); return; }
     setLoadError(null);
     let active = true;
     Promise.all([
@@ -95,8 +100,11 @@ export function useAppData(user: User | null) {
         if (!active) return;
         const mother = memberResult?.members.find(member => member.role === "mother");
         const companion = memberResult?.members.find(member => member.role === "companion");
+        setRole(profile.role === "companion" ? "companion" : "mother");
         setHasPregnancy(Boolean(pregnancy));
         setPregnancyId(pregnancy?.id ?? null);
+        setBirthAt(pregnancy?.birth_at ? new Date(pregnancy.birth_at) : null);
+        setPostpartumAdmin(pregnancy?.postpartum_admin ?? {});
         setUserProfile(previous => ({
           ...previous,
           motherName: mother?.full_name || (profile.role === "mother" ? profile.full_name || previous.motherName : previous.motherName),
@@ -190,6 +198,29 @@ export function useAppData(user: User | null) {
     setAlert(null);
   }
 
+  // Beralih mode baru setelah server menyimpan, agar akun suami melihat status yang sama
+  async function confirmBirth(date: Date) {
+    const saved = await api.updateCurrentPregnancy({ birth_at: date.toISOString() });
+    setBirthAt(saved.birth_at ? new Date(saved.birth_at) : null);
+    setPostpartumAdmin(saved.postpartum_admin ?? {});
+  }
+
+  async function cancelBirth() {
+    await api.updateCurrentPregnancy({ birth_at: null, postpartum_admin: {} });
+    setBirthAt(null);
+    setPostpartumAdmin({});
+  }
+
+  function togglePostpartumAdmin(stepId: string) {
+    const previous = postpartumAdmin;
+    const next = { ...previous, [stepId]: !previous[stepId] };
+    setPostpartumAdmin(next);
+    void api.updateCurrentPregnancy({ postpartum_admin: next }).catch(error => {
+      console.error("Failed to save postpartum admin progress", error);
+      setPostpartumAdmin(current => current === next ? previous : current);
+    });
+  }
+
   // Data vital baru tampil setelah server benar-benar menyimpannya; kegagalan dilempar ke form agar user diberi tahu
   async function addVital(vital: VitalLog) {
     const saved = await api.createVital({
@@ -240,9 +271,10 @@ export function useAppData(user: User | null) {
   }
 
   return {
-    hasPregnancy, loadError, retryLoad: () => setReloadKey(k => k + 1),
+    role, hasPregnancy, loadError, retryLoad: () => setReloadKey(k => k + 1),
     alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
     addVital, toggleVitamin, toggleSymptom, saveVitamins,
+    birthAt, postpartumAdmin, confirmBirth, cancelBirth, togglePostpartumAdmin,
   };
 }

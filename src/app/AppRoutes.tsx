@@ -49,6 +49,11 @@ type AppRoutesProps = {
   customSymptoms: CustomSymptom[];
   setCustomSymptoms: Dispatch<SetStateAction<CustomSymptom[]>>;
   trackers: Trackers;
+  birthAt: Date | null;
+  postpartumAdmin: Record<string, boolean>;
+  onConfirmBirth: (date: Date) => Promise<void>;
+  onCancelBirth: () => Promise<void>;
+  onTogglePostpartumAdmin: (stepId: string) => void;
 };
 
 export function AppRoutes(props: AppRoutesProps) {
@@ -66,7 +71,8 @@ export function AppRoutes(props: AppRoutesProps) {
       <Route path="/resources" element={<ResourcesScreen t={props.t} motherName={props.motherName} fatherName={props.fatherName} dueDate={props.dueDate} hospital={props.hospital} doctor={props.doctor} />} />
       <Route path="/emergency" element={<EmergencyScreen t={props.t} mode={props.mode} alert={props.alert} onSendAlert={props.onSendAlert} onAck={props.onAck} onResolve={props.onResolveAlert} onBack={props.onBack}
         contacts={{ hospital: props.hospital, doctor: props.doctor, motherName: props.motherName, fatherName: props.fatherName, motherPhone: props.motherPhone, fatherPhone: props.fatherPhone }} />} />
-      <Route path="/postpartum" element={<PostpartumScreen t={props.t} onBack={props.onBack} />} />
+      <Route path="/postpartum" element={<PostpartumScreen t={props.t} mode={props.mode} birthAt={props.birthAt} checks={props.postpartumAdmin}
+        onConfirmBirth={props.onConfirmBirth} onCancelBirth={props.onCancelBirth} onToggleAdmin={props.onTogglePostpartumAdmin} />} />
     </Routes>
   );
 }

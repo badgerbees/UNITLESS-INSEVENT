@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
 from app.api.routes.notifications import WIB, due_reminders
@@ -38,6 +39,16 @@ def test_emergency_alert_requires_a_message() -> None:
     except ValidationError:
         return
     raise AssertionError("EmergencyAlertCreate accepted an empty message")
+
+
+def test_missing_supabase_table_returns_clear_503() -> None:
+    @app.get("/api/_test/missing-table")
+    def missing_table() -> None:
+        raise APIError({"message": "Could not find the table 'public.emergency_alerts' in the schema cache", "code": "PGRST205"})
+
+    response = client.get("/api/_test/missing-table", headers={"Origin": "http://localhost:5173"})
+    assert response.status_code == 503
+    assert "migrasi" in response.json()["detail"]
 
 
 def test_vitamin_reminder_uses_latest_passed_slot() -> None:

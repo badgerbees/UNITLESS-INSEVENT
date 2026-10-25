@@ -94,6 +94,8 @@ export type Pregnancy = {
   hospital: string | null;
   doctor: string | null;
   sync_code: string;
+  birth_at?: string | null;
+  postpartum_admin?: Record<string, boolean>;
   created_at: string;
 };
 
@@ -179,6 +181,8 @@ export const api = {
     blood_type?: string;
     hospital?: string;
     doctor?: string;
+    birth_at?: string | null;
+    postpartum_admin?: Record<string, boolean>;
   }) => request<Pregnancy>("/pregnancies/current", {
     method: "PATCH",
     body: JSON.stringify(payload),

@@ -5,6 +5,7 @@ import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
 import { StatTile } from "../components/StatTile";
 import { fmtDate, addDays } from "../utils/helpers";
+import { ApiError } from "../services/api";
 import {
   Home, Activity, Calendar, FileText, Package, Bell,
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
@@ -51,7 +52,21 @@ function useSecondsSince(date: Date | undefined) {
   return seconds;
 }
 
-export type EmergencyContacts = { hospital: string; doctor: string; motherName: string; fatherName: string; motherPhone: string; fatherPhone: string };
+// Pesan gagal kirim yang sesuai penyebabnya; pesan koneksi hanya untuk kegagalan jaringan
+function sendErrorMessage(error: unknown) {
+  const fallback = " Sementara itu, langsung telepon 119 bila darurat.";
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Sesi login berakhir. Keluar lalu login ulang, atau langsung telepon 119.";
+    if (error.status === 403) return "Hanya akun Bunda yang bisa mengirim notifikasi darurat.";
+    if (error.status === 404) return "Data kehamilan belum ada. Lengkapi profil kehamilan dulu." + fallback;
+    if (error.status === 422) return `Pesan ditolak server: ${error.message}.`;
+    return `Gagal mengirim: ${error.message}${fallback}`;
+  }
+  if (error instanceof TypeError) return "Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi, atau langsung telepon 119.";
+  return "Gagal mengirim." + fallback;
+}
+
+export type EmergencyContacts ={ hospital: string; doctor: string; motherName: string; fatherName: string; motherPhone: string; fatherPhone: string };
 
 export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve, onBack, contacts }: {
   t: Theme; mode: Mode; onBack: () => void; contacts: EmergencyContacts;
@@ -88,8 +103,8 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
         ...coords,
       });
       setCompanionNotified(notified);
-    } catch {
-      setSendError("Gagal mengirim. Periksa koneksi internet lalu coba lagi, atau langsung telepon 119.");
+    } catch (error) {
+      setSendError(sendErrorMessage(error));
     } finally {
       setSending(false);
     }
@@ -115,12 +130,9 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
     <div className="space-y-4 w-full">
       {/* Spanduk darurat ringkas: identitas halaman jelas tanpa mendorong aksi utama ke bawah */}
       <div className="rounded-3xl px-6 py-5 flex items-center gap-4" style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)", boxShadow: "0 8px 24px rgba(220,38,38,0.25)" }}>
-        <div className="relative w-12 h-12 flex-shrink-0">
-          <span className="absolute inset-0 rounded-full bg-white/30 animate-ping motion-reduce:animate-none" />
-          <span className="relative w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-            <AlertTriangle size={22} className="text-white" />
-          </span>
-        </div>
+        <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle size={22} className="text-white" />
+        </span>
         <div className="flex-1 min-w-0">
           <p className="text-2xl font-extrabold text-white leading-tight">Mode Darurat</p>
           <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>
@@ -150,7 +162,7 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
 
             {!alert ? (
               <>
-                <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: t.soft }}>
+                <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: t.soft }}>
                   <MapPin size={16} color={t.active} className="flex-shrink-0" />
                   <div>
                     <p className="text-xs font-bold" style={{ color: t.dark }}>Lokasi saat ini (GPS)</p>
@@ -164,13 +176,13 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
 
                 {/* Pilihan pesan: daftar satu kolom bergaya radio */}
                 <p className="text-xs font-bold mb-2" style={{ color: t.dark }}>Pesan</p>
-                <div className="space-y-2 mb-5" role="radiogroup" aria-label="Pilih pesan darurat">
+                <div className="space-y-2 mb-4" role="radiogroup" aria-label="Pilih pesan darurat">
                   {messages.map((m, i) => {
                     const on = msgIdx === i;
                     return (
                       <div key={i}>
                         <button role="radio" aria-checked={on} onClick={() => setMsgIdx(i)}
-                          className="w-full flex items-center gap-3 text-left rounded-xl px-4 py-3 text-[13px]"
+                          className="w-full flex items-center gap-3 text-left rounded-xl px-4 py-2.5 text-[13px]"
                           style={{ background: on ? "#fef2f2" : "#f8f8f8", border: `1.5px solid ${on ? "#ef4444" : "transparent"}`, color: on ? "#b91c1c" : t.dark, fontWeight: on ? 700 : 500 }}>
                           <span className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center" style={{ border: `2px solid ${on ? "#ef4444" : "#d1d5db"}` }}>
                             {on && <span className="w-2 h-2 rounded-full bg-red-500" />}
@@ -190,11 +202,11 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
                 </div>
 
                 <button onClick={handleSend} disabled={sending || (msgIdx === 3 && !customMsg.trim())}
-                  className="ui-interactive w-full py-4 rounded-2xl font-extrabold text-white text-base flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: sending ? "#f87171" : "linear-gradient(135deg,#ef4444,#b91c1c)", boxShadow: "0 6px 18px rgba(239,68,68,0.3)" }}>
+                  className="ui-interactive w-full py-3 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: sending ? "#f87171" : "linear-gradient(135deg,#ef4444,#b91c1c)", boxShadow: "0 4px 12px rgba(239,68,68,0.25)" }}>
                   {sending
-                    ? <><RefreshCw size={18} className="animate-spin" /> Mengirim…</>
-                    : <><Send size={18} /> Kirim Notifikasi + Bagikan Lokasi</>
+                    ? <><RefreshCw size={16} className="animate-spin" /> Mengirim…</>
+                    : <><Send size={16} /> Kirim Notifikasi + Bagikan Lokasi</>
                   }
                 </button>
                 {sendError && <p className="text-xs text-red-600 mt-2 text-center">{sendError}</p>}
@@ -272,7 +284,8 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
           )}
         </div>
 
-        {/* Kanan (1/3): panggilan cepat */}
+        {/* Kanan (1/3): panggilan cepat + fasilitas kesehatan, supaya tinggi kedua kolom seimbang */}
+        <div className="space-y-4">
         <Card t={t} className="p-5" style={{ border: "1.5px solid #fecaca" }}>
           <p className="text-xs font-bold uppercase tracking-wide mb-3 text-red-500">Panggilan Cepat</p>
           <div className="space-y-2">
@@ -303,12 +316,11 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
           </div>
           <p className="text-[10px] mt-3 leading-relaxed" style={{ color: t.muted }}>Di komputer, tombol telepon membuka aplikasi panggilan bila tersedia.</p>
         </Card>
-      </div>
 
       {/* Fasilitas kesehatan: data asli dari profil + pencarian di Google Maps */}
       <Card t={t} className="p-5" style={{ border: "1.5px solid #fecaca" }}>
         <p className="text-xs font-bold uppercase tracking-wide mb-3 text-red-500">Fasilitas Kesehatan</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
           <div className="flex items-center gap-3 rounded-2xl px-4 py-3" style={{ background: t.soft }}>
             <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0"><Heart size={18} color={t.active} /></span>
             <div className="flex-1 min-w-0">
@@ -339,6 +351,8 @@ export function EmergencyScreen({ t, mode, alert, onSendAlert, onAck, onResolve,
           </div>
         </div>
       </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -363,7 +377,8 @@ export function CompanionEmergencyPanel({ t, alert, onAck, geo }: { t: Theme; al
     ? haversineKm(geo.lat, geo.lng, alert.lat, alert.lng) : null;
 
   return (
-    <div className="col-span-2 grid grid-cols-2 gap-4">
+    // Ditumpuk vertikal (status di atas, checklist di bawah) agar tinggi kolom kiri seimbang dengan kolom kanan
+    <div className="space-y-4">
       {/* Alert status */}
       <Card t={t} className="p-5">
         <div className="flex items-center gap-2 mb-4">
@@ -435,18 +450,20 @@ export function CompanionEmergencyPanel({ t, alert, onAck, geo }: { t: Theme; al
             )}
           </div>
         ) : (
-          <div className="rounded-2xl p-6 text-center" style={{ background: "#f0fdf4", border: "1.5px solid #86efac" }}>
-            <Check size={28} className="text-green-500 mx-auto mb-2" />
-            <p className="text-sm font-bold text-green-700">Kondisi Bunda Normal</p>
-            <p className="text-xs text-green-600 mt-1">Tidak ada notifikasi darurat aktif</p>
+          <div className="rounded-2xl px-5 py-4 flex items-center gap-4" style={{ background: "#f0fdf4", border: "1.5px solid #86efac" }}>
+            <span className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+              <Check size={20} className="text-white" />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-green-700">Kondisi Bunda Normal</p>
+              <p className="text-xs text-green-600 mt-0.5">Tidak ada notifikasi darurat aktif</p>
+            </div>
           </div>
         )}
       </Card>
 
-      {/* Checklist & Contacts */}
-      <div className="space-y-4">
-        {/* Action checklist */}
-        <Card t={t} className="p-4">
+      {/* Action checklist */}
+        <Card t={t} className="p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-extrabold uppercase tracking-wide" style={{ color: t.dark }}>Checklist Suami</p>
             <span className="text-xs font-bold" style={{ color: donePct === 100 ? "#22c55e" : t.active }}>{donePct}%</span>
@@ -454,23 +471,22 @@ export function CompanionEmergencyPanel({ t, alert, onAck, geo }: { t: Theme; al
           <div className="h-1.5 rounded-full overflow-hidden mb-3" style={{ background: t.soft }}>
             <div className="h-full rounded-full transition-all" style={{ width: `${donePct}%`, background: donePct === 100 ? "#22c55e" : t.active }} />
           </div>
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {checklistItems.map(item => (
               <button key={item.id} onClick={() => setChecks(p => ({ ...p, [item.id]: !p[item.id] }))}
-                className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-left"
-                style={{ background: checks[item.id] ? "#f0fdf4" : t.soft }}>
+                className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left"
+                style={{ background: checks[item.id] ? "#f0fdf4" : t.soft, opacity: checks[item.id] ? 0.7 : 1 }}>
                 <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                  style={{ background: checks[item.id] ? "#22c55e" : t.border }}>
-                  {checks[item.id] && <Check size={10} className="text-white" />}
+                  style={{ background: checks[item.id] ? "#22c55e" : "#fff", border: `1.5px solid ${checks[item.id] ? "#22c55e" : t.primary}` }}>
+                  {checks[item.id] && <Check size={10} className="text-white" strokeWidth={3} />}
                 </div>
-                <span className="text-xs" style={{ color: checks[item.id] ? "#22c55e" : t.dark, textDecoration: checks[item.id] ? "line-through" : "none" }}>
+                <span className="text-xs" style={{ color: checks[item.id] ? "#15803d" : t.dark }}>
                   {item.label}
                 </span>
               </button>
             ))}
           </div>
         </Card>
-      </div>
     </div>
   );
 }

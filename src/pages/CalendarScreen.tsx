@@ -4,26 +4,17 @@ import { Card } from "../components/Card";
 import { PillBtn } from "../components/PillBtn";
 import { SectionTitle } from "../components/SectionTitle";
 import { StatTile } from "../components/StatTile";
-import { fmtDate, addDays } from "../utils/helpers";
+import { fmtDate, addDays, localIsoDate } from "../utils/helpers";
 import { api, ApiError } from "../services/api";
 import {
   Home, Activity, Calendar, FileText, Package, Bell,
   Plus, Minus, Check, X, AlertTriangle, Download, Baby,
-  PhoneCall, ArrowRight, RefreshCw, ChevronLeft, Search, Heart,
+  PhoneCall, ArrowRight, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Search, Heart,
   MapPin, Navigation, Send, CheckCheck, Clock, Zap, Printer, Mail, Lock, LogOut, Settings, History, Users, Scissors, Droplets, Brain, HeartPulse, Eye, Bone, Wind, Activity as ActivityIcon,
   User, Smartphone, Copy, Headphones, MessageCircle, HelpCircle
 } from "lucide-react";
 type CalEvent = { id?: string; date: string; label: string; type: "anc" | "vitamin" | "hpl" | "other"; notes?: string; completed?: boolean };
 
-const ALL_EVENTS: CalEvent[] = [
-  { date: "2025-01-23", label: "ANC – Tes Diabetes Gestasional", type: "anc"     },
-  { date: "2025-01-28", label: "USG Biometri Janin",              type: "anc"     },
-  { date: "2025-02-10", label: "Kelas Persalinan",                type: "other"   },
-  { date: "2025-02-20", label: "ANC – Biometri (Minggu 32)",      type: "anc"     },
-  { date: "2025-03-10", label: "ANC – Posisi Janin (Minggu 36)",  type: "anc"     },
-  { date: "2025-03-24", label: "ANC – Persiapan Persalinan",      type: "anc"     },
-  { date: "2025-09-07", label: "HPL – Perkiraan Lahir",           type: "hpl"     },
-];
 
 export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester }: {
   t: Theme; dueDate: Date; weeksPreg: number; daysUntilDue: number; trimester: number;
@@ -31,16 +22,15 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
   const today      = new Date();
   const [viewYear, setViewYear]   = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selectedDay, setSelectedDay] = useState<string | null>(
-    today.toISOString().slice(0, 10)
-  );
+  // Tanggal lokal (bukan UTC) agar "hari ini" benar untuk WIB sebelum pukul 07.00
+  const todayIso = localIsoDate(today);
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayIso);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(today.getFullYear());
 
   const [listTab, setListTab] = useState<"upcoming" | "history">("upcoming");
 
-  // Editable events state (seeded from hardcoded list)
-  const [events, setEvents] = useState<CalEvent[]>(ALL_EVENTS);
+  const [events, setEvents] = useState<CalEvent[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: "", label: "", type: "anc" as CalEvent["type"] });
 
@@ -112,7 +102,10 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
     setViewMonth(m); setViewYear(y);
   }
 
-  const todayIso  = today.toISOString().slice(0, 10);
+  const hplIso    = localIsoDate(dueDate);
+  // Selisih hari kalender dari hari ini ke HPL (negatif = sudah lewat)
+  const daysToHpl = Math.round((new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime()
+    - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 864e5);
   const selEvents = selectedDay ? eventsOn(selectedDay) : [];
 
   const typeColor: Record<CalEvent["type"], string> = {
@@ -156,7 +149,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
             <div className="flex items-center gap-2 mt-3">
               <span className="rounded-full px-3 py-1 text-xs font-bold"
                 style={{ background: "rgba(255,255,255,0.2)", color: "#fff" }}>
-                {daysUntilDue > 0 ? `${daysUntilDue} hari lagi` : "Hari ini / sudah lewat"}
+                {daysToHpl > 0 ? `${daysToHpl} hari lagi` : daysToHpl === 0 ? "Hari ini HPL" : `Lewat ${-daysToHpl} hari dari HPL`}
               </span>
               <span className="rounded-full px-3 py-1 text-xs font-bold"
                 style={{ background: "rgba(255,255,255,0.2)", color: "#fff" }}>
@@ -171,11 +164,14 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
 
           {/* Right — stats strip */}
               <div className="flex divide-x" style={{ borderLeft: "1px solid rgba(255,255,255,0.15)" }}>
-            {[
-              { label: "Sisa Hari",   value: daysUntilDue },
-              { label: "Sisa Minggu", value: Math.max(0, Math.ceil(daysUntilDue / 7)) },
+            {(daysToHpl >= 0 ? [
+              { label: "Sisa Hari",   value: daysToHpl },
+              { label: "Sisa Minggu", value: Math.ceil(daysToHpl / 7) },
               { label: "Trimester",   value: trimester },
-            ].map(s => (
+            ] : [
+              { label: "Hari Lewat HPL", value: -daysToHpl },
+              { label: "Trimester",      value: trimester },
+            ]).map(s => (
               <div key={s.label} className="flex flex-col items-center justify-center px-7 py-4 gap-1"
                 style={{ borderLeft: "1px solid rgba(255,255,255,0.15)" }}>
                 <p className="text-2xl font-extrabold text-white leading-none">{s.value}</p>
@@ -187,9 +183,9 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
             <button
               onClick={() => { setViewYear(dueDate.getFullYear()); setViewMonth(dueDate.getMonth()); }}
               title="Pergi ke bulan HPL"
-              className="flex flex-col items-center justify-center px-6 py-4 gap-1.5 transition-all hover:brightness-110 group"
+              className="ui-interactive flex flex-col items-center justify-center px-6 py-4 gap-1.5"
               style={{ borderLeft: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.12)" }}>
-              <Calendar size={22} color="#fff" className="group-hover:scale-110 transition-transform" />
+              <Calendar size={22} color="#fff" />
               <p className="text-[10px] font-bold" style={{ color: "rgba(255,255,255,0.65)" }}>Lihat HPL</p>
             </button>
           </div>
@@ -216,65 +212,73 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
 
             <button
               onClick={() => { setForm(f => ({ ...f, date: selectedDay ?? isoDate(viewYear, viewMonth, today.getDate()) })); setShowForm(v => !v); }}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all"
+              className="ui-interactive flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
               style={{ background: showForm ? t.active : t.soft, color: showForm ? "#fff" : t.active }}>
               {showForm ? <X size={12} /> : <Plus size={12} />} {showForm ? "Batal Tambah" : "Tambah Jadwal"}
             </button>
           </div>
 
           {/* Month / Year nav */}
+          {/* Judul bulan (klik = pilih bulan/tahun) di kiri; navigasi per bulan & "Hari ini" dikelompokkan di kanan */}
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => navigate(-1)}
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-              style={{ background: t.soft }}>
-              <ChevronLeft size={16} color={t.active} />
-            </button>
-
-            {/* Clickable header → opens picker */}
             <button onClick={() => { setShowPicker(p => !p); setPickerYear(viewYear); }}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-full transition-all font-extrabold text-base"
-              style={{ background: showPicker ? t.soft : "transparent", color: t.dark }}>
+              title="Pilih bulan & tahun" aria-expanded={showPicker}
+              className="flex items-center gap-1 -ml-3 pl-3 pr-2 py-1.5 rounded-xl font-extrabold text-lg transition-colors hover:bg-black/5"
+              style={{ background: showPicker ? t.soft : undefined, color: t.dark }}>
               {MONTHS_ID[viewMonth]} {viewYear}
-              <span className="text-[11px]" style={{ color: t.muted }}>{showPicker ? "▲" : "▼"}</span>
+              <ChevronDown size={18} color={t.muted}
+                className="transition-transform duration-200" style={{ transform: showPicker ? "rotate(180deg)" : undefined }} />
             </button>
 
-            <button onClick={() => navigate(1)}
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-              style={{ background: t.soft }}>
-              <ArrowRight size={16} color={t.active} />
-            </button>
+            <div className="flex items-center gap-2">
+              {(viewMonth !== today.getMonth() || viewYear !== today.getFullYear() || selectedDay !== todayIso) && (
+                <button onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); setSelectedDay(todayIso); setShowPicker(false); }}
+                  className="ui-interactive text-xs font-bold px-3 py-1.5 rounded-full"
+                  style={{ background: t.soft, color: t.active }}>
+                  Hari ini
+                </button>
+              )}
+              <button onClick={() => navigate(-1)} aria-label="Bulan sebelumnya"
+                className="ui-interactive w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: t.soft }}>
+                <ChevronLeft size={16} color={t.active} />
+              </button>
+              <button onClick={() => navigate(1)} aria-label="Bulan berikutnya"
+                className="ui-interactive w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: t.soft }}>
+                <ChevronRight size={16} color={t.active} />
+              </button>
+            </div>
           </div>
 
           {/* Month / Year Picker Panel */}
           {showPicker && (
             <div className="mb-4 rounded-3xl p-5 shadow-sm transition-all" style={{ background: t.soft, border: `1px solid ${t.border}` }}>
-              {/* Year row */}
-              <div className="flex justify-center mb-4">
-                <div className="relative">
-                  <select 
-                    className="appearance-none outline-none text-sm font-extrabold text-center pl-6 pr-9 py-2 rounded-full cursor-pointer transition-all hover:scale-105"
-                    style={{ background: t.card, color: t.dark, boxShadow: `0 2px 8px ${t.shadow}` }}
-                    value={pickerYear}
-                    onChange={(e) => setPickerYear(Number(e.target.value))}
-                  >
-                    {Array.from({ length: 11 }).map((_, i) => {
-                      const y = new Date().getFullYear() - 2 + i;
-                      return <option key={y} value={y}>{y}</option>;
-                    })}
-                  </select>
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-bold" style={{ color: t.active }}>▼</span>
-                </div>
+              {/* Baris tahun: ‹ 2026 › — format sama dengan navigasi bulan di kalender */}
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={() => setPickerYear(y => y - 1)} aria-label="Tahun sebelumnya"
+                  className="ui-interactive w-8 h-8 rounded-full flex items-center justify-center" style={{ background: t.card }}>
+                  <ChevronLeft size={16} color={t.active} />
+                </button>
+                <p className="text-base font-extrabold" style={{ color: t.dark }}>{pickerYear}</p>
+                <button onClick={() => setPickerYear(y => y + 1)} aria-label="Tahun berikutnya"
+                  className="ui-interactive w-8 h-8 rounded-full flex items-center justify-center" style={{ background: t.card }}>
+                  <ChevronRight size={16} color={t.active} />
+                </button>
               </div>
               {/* Month grid */}
               <div className="grid grid-cols-4 gap-2">
                 {MONTHS_ID.map((m, i) => {
                   const isSelected = i === viewMonth && pickerYear === viewYear;
+                  // Bulan berjalan diberi garis tepi agar mudah ditemukan saat berpindah tahun
+                  const isCurrent = i === today.getMonth() && pickerYear === today.getFullYear();
                   return (
                     <button key={m} onClick={() => { setViewMonth(i); setViewYear(pickerYear); setShowPicker(false); }}
-                      className="py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
+                      className="py-2 rounded-xl text-xs font-bold"
                       style={{
                         background: isSelected ? t.active : t.card,
-                        color: isSelected ? "#fff" : t.dark,
+                        color: isSelected ? "#fff" : isCurrent ? t.active : t.dark,
+                        border: `1.5px solid ${isCurrent && !isSelected ? t.active : "transparent"}`,
                         boxShadow: isSelected ? `0 4px 12px ${t.shadow}` : `0 2px 6px ${t.shadow}`,
                       }}>
                       {m.slice(0, 3)}
@@ -301,7 +305,8 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
               const isToday  = cell.iso === todayIso;
               const isSel    = cell.iso === selectedDay;
               
-              const mainEvent = events.find(e => e.type === "hpl") || events.find(e => e.type === "anc") || events[0];
+              const isHpl    = cell.iso === hplIso;
+              const mainEvent = events.find(e => e.type === "hpl") || (isHpl ? { type: "hpl" as const } : undefined) || events.find(e => e.type === "anc") || events[0];
 
               let bg = "transparent";
               let borderCol = "transparent";
@@ -320,8 +325,8 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
               }
 
               return (
-                <button key={idx} onClick={() => cell.cur && setSelectedDay(cell.iso)}
-                  className="flex flex-col items-center justify-center rounded-xl py-1.5 px-1 transition-all min-h-[52px]"
+                <button key={idx} onClick={() => cell.cur && setSelectedDay(cell.iso)} title={isHpl ? "Perkiraan persalinan (HPL)" : undefined}
+                  className="flex flex-col items-center justify-center rounded-xl py-1.5 px-1 min-h-[52px]"
                   style={{
                     background: bg,
                     border: `1.5px solid ${borderCol}`,
@@ -365,7 +370,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
                     <div className="grid grid-cols-3 gap-2">
                       {(["anc", "hpl", "other"] as CalEvent["type"][]).map(tp => (
                         <button key={tp} onClick={() => setForm(f => ({ ...f, type: tp }))}
-                          className="py-2.5 rounded-xl text-[11px] font-bold transition-all border"
+                          className="py-2.5 rounded-xl text-[11px] font-bold border"
                           style={{
                             background: form.type === tp ? typeColor[tp] : t.card,
                             color: form.type === tp ? "#fff" : t.muted,
@@ -377,7 +382,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
                     </div>
                   </div>
                   <button onClick={addEvent} disabled={!form.date || !form.label}
-                    className="w-full py-3 rounded-xl text-sm font-bold transition-all mt-2 flex items-center justify-center gap-2"
+                    className="ui-interactive w-full py-3 rounded-xl text-sm font-bold mt-2 flex items-center justify-center gap-2"
                     style={{ background: form.date && form.label ? t.active : t.border, color: "#fff" }}>
                     <Check size={16} /> Simpan Jadwal
                   </button>
@@ -385,7 +390,16 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
               </div>
             ) : (
               <>
-                {selectedDay && selEvents.length === 0 && (
+                {selectedDay === hplIso && !selEvents.some(e => e.type === "hpl") && (
+                  <div className="flex items-center gap-3 rounded-xl px-4 py-3 mb-2" style={{ background: "#fff7ed", border: "1.5px solid #fcd34d" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-lg">🌟</div>
+                    <div>
+                      <p className="text-sm font-bold text-orange-700">Perkiraan persalinan (HPL)</p>
+                      <p className="text-[11px] text-orange-500">Dihitung otomatis dari HPHT</p>
+                    </div>
+                  </div>
+                )}
+                {selectedDay && selEvents.length === 0 && selectedDay !== hplIso && (
                   <p className="text-xs" style={{ color: t.muted }}>Tidak ada jadwal. Klik "Tambah Jadwal" untuk menambahkan.</p>
                 )}
                 <div className="space-y-2">
@@ -460,13 +474,13 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
               {listTab === "upcoming" && (
                 <>
                   {[...events]
-                    .filter(ev => ev.date >= today.toISOString().slice(0, 10))
+                    .filter(ev => ev.date >= todayIso)
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map((ev, i) => {
                     const globalIdx = events.indexOf(ev);
                     return (
                       <div key={`up-${i}`}
-                        className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer transition-all hover:brightness-95"
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer"
                         style={{ background: t.soft }}
                         onClick={() => { setSelectedDay(ev.date); setViewYear(parseInt(ev.date.slice(0,4))); setViewMonth(parseInt(ev.date.slice(5,7)) - 1); }}>
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: typeColor[ev.type] }} />
@@ -484,7 +498,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
                       </div>
                     );
                   })}
-                  {events.filter(ev => ev.date >= today.toISOString().slice(0, 10)).length === 0 && (
+                  {events.filter(ev => ev.date >= todayIso).length === 0 && (
                     <p className="text-xs text-center py-4" style={{ color: t.muted }}>Tidak ada jadwal mendatang.</p>
                   )}
                 </>
@@ -493,13 +507,13 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
               {listTab === "history" && (
                 <>
                   {[...events]
-                    .filter(ev => ev.date < today.toISOString().slice(0, 10))
+                    .filter(ev => ev.date < todayIso)
                     .sort((a, b) => b.date.localeCompare(a.date)) // Sort descending for history
                     .map((ev, i) => {
                     const globalIdx = events.indexOf(ev);
                     return (
                       <div key={`hist-${i}`}
-                        className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer transition-all hover:brightness-95 opacity-60 hover:opacity-100"
+                        className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 cursor-pointer opacity-60"
                         style={{ background: t.soft }}
                         onClick={() => { setSelectedDay(ev.date); setViewYear(parseInt(ev.date.slice(0,4))); setViewMonth(parseInt(ev.date.slice(5,7)) - 1); }}>
                         <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: typeColor[ev.type] }} />
@@ -512,7 +526,7 @@ export function CalendarScreen({ t, dueDate, weeksPreg, daysUntilDue, trimester 
                       </div>
                     );
                   })}
-                  {events.filter(ev => ev.date < today.toISOString().slice(0, 10)).length === 0 && (
+                  {events.filter(ev => ev.date < todayIso).length === 0 && (
                     <p className="text-xs text-center py-4" style={{ color: t.muted }}>Belum ada riwayat jadwal.</p>
                   )}
                 </>

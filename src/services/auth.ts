@@ -30,4 +30,9 @@ export const auth = {
   async signOut() {
     return getSupabaseClient().auth.signOut();
   },
+
+  // Hapus sesi di browser saja (tanpa memanggil server) — untuk sesi yang sudah tidak berlaku
+  async clearLocalSession() {
+    return getSupabaseClient().auth.signOut({ scope: "local" });
+  },
 };

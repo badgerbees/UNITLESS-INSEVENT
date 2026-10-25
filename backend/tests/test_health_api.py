@@ -9,7 +9,7 @@ client = TestClient(app)
 
 
 def test_health_routes_require_authentication() -> None:
-    for path in ("/api/health/vitals", "/api/health/symptoms", "/api/health/vitamins"):
+    for path in ("/api/health/vitals", "/api/health/symptoms", "/api/health/vitamins", "/api/health/kick-sessions", "/api/health/contraction-sessions"):
         response = client.get(path)
         assert response.status_code == 401
 
@@ -37,3 +37,38 @@ def test_vital_schema_rejects_invalid_pregnancy_week() -> None:
 def test_vital_schema_applies_default_protein_result() -> None:
     vital = VitalCreate(pregnancy_week=20, blood_pressure="120/80")
     assert vital.urine_protein == "Negatif"
+
+
+def test_create_vital_sends_json_serializable_row(monkeypatch) -> None:
+    import json
+
+    from app.api.routes import health_data
+    from app.core.auth import CurrentUser, get_current_user
+
+    inserted: list[dict] = []
+
+    class FakeQuery:
+        def insert(self, row: dict) -> "FakeQuery":
+            json.dumps(row)  # sama seperti yang dilakukan klien Supabase sebelum mengirim
+            inserted.append(row)
+            return self
+
+        def execute(self):
+            return type("Result", (), {"data": inserted})()
+
+    class FakeSupabase:
+        def table(self, _name: str) -> FakeQuery:
+            return FakeQuery()
+
+    monkeypatch.setattr(health_data, "get_supabase_admin", lambda: FakeSupabase())
+    monkeypatch.setattr(health_data, "current_pregnancy", lambda _user: {"id": "preg-1", "mother_id": "mother-1"})
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="mother-1", email=None)
+    try:
+        response = client.post("/api/health/vitals", json={
+            "pregnancy_week": 40, "blood_pressure": "118/76", "weight": 68.5, "fundal_height": 32, "hemoglobin": 11.8,
+        })
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert inserted[0]["weight"] == "68.5"

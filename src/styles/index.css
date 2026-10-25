@@ -2,3 +2,52 @@
 @import './tailwind.css';
 @import './theme.css';
 @import './organ-anim.css';
+
+@layer components {
+  .ui-interactive {
+    transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
+  }
+
+  .ui-interactive:hover {
+    filter: brightness(1.015);
+    transform: translateY(-1px);
+  }
+
+  .ui-interactive:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  /* Tombol nonaktif tidak bereaksi terhadap hover/tekan */
+  .ui-interactive:disabled {
+    filter: none;
+    transform: none;
+  }
+
+  .page-content {
+    animation: page-enter 360ms ease both;
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ui-interactive,
+    .page-content {
+      animation: none;
+      transition: none;
+    }
+
+    .ui-interactive:hover,
+    .ui-interactive:active {
+      transform: none;
+    }
+  }
+}

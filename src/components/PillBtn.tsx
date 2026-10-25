@@ -12,7 +12,7 @@ export function PillBtn({ children, onClick, full = false, variant = "primary", 
   const px   = size === "sm" ? "px-4 py-1.5 text-xs" : size === "lg" ? "px-8 py-3.5 text-base" : "px-6 py-2.5 text-sm";
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`rounded-full font-bold transition-all flex items-center justify-center gap-2 ${px} ${full ? "w-full" : ""}`}
+      className={`ui-interactive rounded-full font-bold transition-all flex items-center justify-center gap-2 ${px} ${full ? "w-full" : ""}`}
       style={{ background: disabled ? "#e0d8e0" : bg[variant], color: disabled ? "#b0a8b0" : fg[variant], border: bdr }}
     >
       {children}

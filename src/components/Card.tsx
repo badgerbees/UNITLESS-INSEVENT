@@ -1,6 +1,7 @@
 import React from "react";
 import { Theme } from "../types";
 
+// Kotak statis: efek hover/tekan hanya untuk tombol aksi (kelas ui-interactive), bukan kotaknya
 export function Card({ children, className = "", style = {}, t }: {
   children: React.ReactNode; className?: string; style?: React.CSSProperties; t: Theme;
 }) {

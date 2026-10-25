@@ -79,7 +79,8 @@ def create_vital(payload: VitalCreate, user: CurrentUser = Depends(get_current_u
         "id": str(uuid4()),
         "pregnancy_id": pregnancy["id"],
         "recorded_by": user.id,
-        **payload.model_dump(exclude_none=True),
+        # mode="json": Decimal (berat, fundus, HB) harus jadi nilai JSON sebelum dikirim ke Supabase
+        **payload.model_dump(mode="json", exclude_none=True),
         "recorded_at": (payload.recorded_at or datetime.now(timezone.utc)).isoformat(),
     }
     result = get_supabase_admin().table("vital_logs").insert(row).execute()
@@ -208,6 +209,36 @@ def remove_vitamin_log(vitamin_id: str, day: date | None = Query(default=None), 
         .eq("completed_on", day or date.today())
         .execute()
     )
+
+
+def list_sessions(table: str, user: CurrentUser, limit: int) -> list[dict]:
+    pregnancy = current_pregnancy(user)
+    result = (
+        get_supabase_admin()
+        .table(table)
+        .select("*")
+        .eq("pregnancy_id", pregnancy["id"])
+        .order("started_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data
+
+
+@router.get("/kick-sessions")
+def list_kick_sessions(
+    limit: int = Query(default=200, ge=1, le=1000),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    return list_sessions("kick_sessions", user, limit)
+
+
+@router.get("/contraction-sessions")
+def list_contraction_sessions(
+    limit: int = Query(default=500, ge=1, le=2000),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    return list_sessions("contraction_sessions", user, limit)
 
 
 @router.post("/kick-sessions", status_code=status.HTTP_201_CREATED)

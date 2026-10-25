@@ -7,7 +7,7 @@ export function OrganChip({ organ, label, active, onClick, t }: {
 }) {
   return (
     <button onClick={onClick}
-      className="group flex items-center gap-3 rounded-2xl p-2.5 pr-3 transition-all hover:-translate-y-0.5 text-left min-w-0"
+      className="group flex items-center gap-3 rounded-2xl p-2.5 pr-3 text-left min-w-0"
       style={{
         background: active ? t.active : t.soft,
         boxShadow: active ? `0 8px 18px ${t.shadow}` : "none",

@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "UNITLESS API"
+    app_name: str = "TemanBunda API"
     app_version: str = "0.1.0"
     environment: str = "development"
     frontend_url: str = "http://localhost:5173"

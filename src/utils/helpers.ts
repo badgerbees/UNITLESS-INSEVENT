@@ -1,4 +1,8 @@
 export function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+// Tanggal lokal perangkat (YYYY-MM-DD), bukan UTC — "hari ini" mengikuti jam user, mis. WIB
+export function localIsoDate(d: Date = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 export function fmtDate(d: Date) { return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }); }
 
 export type Fruit = { name: string; typeId: number; weight: string; length: string };

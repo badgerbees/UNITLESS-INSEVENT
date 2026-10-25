@@ -1,6 +1,6 @@
-# UNITLESS Backend
+# TemanBunda Backend
 
-FastAPI backend for the UNITLESS pregnancy companion application.
+FastAPI backend for the TemanBunda pregnancy companion application.
 
 ## Local development
 

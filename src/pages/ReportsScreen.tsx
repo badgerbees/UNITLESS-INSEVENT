@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Theme, VitalLog, EmergencyAlert, Risk, Mode } from "../types";
 import { api, ReportSummary } from "../services/api";
 import { Card } from "../components/Card";
 import { PillBtn } from "../components/PillBtn";
+import { VitalEntryForm } from "../components/VitalEntryForm";
+import { VitalDangerAlert } from "../components/VitalDangerAlert";
+import { assessVital } from "../utils/vitalValidation";
+import { printElement } from "../utils/printElement";
 import { SectionTitle } from "../components/SectionTitle";
 import { StatTile } from "../components/StatTile";
 import { fmtDate, addDays } from "../utils/helpers";
@@ -135,10 +139,11 @@ export function SvgAreaChart({ data, seriesKey, seriesName, color }: {
   );
 }
 
-export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
-  t: Theme; vitalLogs: VitalLog[]; weeksPreg: number; dueDate: Date;
+export function MedicalReportPreview({ t, vitalLogs, weeksPreg, daysExtra, dueDate, motherName }: {
+  t: Theme; vitalLogs: VitalLog[]; weeksPreg: number; daysExtra: number; dueDate: Date; motherName: string;
 }) {
   const [printing, setPrinting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const chartData = Object.values(
     vitalLogs.reduce<Record<number, { label: string; minggu: number; sistolik: number | null; diastolik: number | null; bb: number | null }>>(
@@ -157,15 +162,30 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
     )
   ).sort((a, b) => a.minggu - b.minggu);
 
-  const latest = vitalLogs.at(-1);
-  const risikoKategori = "HIJAU (NORMAL)";
+  const latest = vitalLogs[vitalLogs.length - 1];
+  // Kategori risiko dari data vital terakhir, memakai aturan yang sama dengan form data vital
+  const assessment = latest ? assessVital(latest, latest.minggu) : null;
+  const risk = !assessment
+    ? { label: "BELUM ADA DATA", color: "#9ca3af" }
+    : Object.keys(assessment.dangers).length > 0
+      ? { label: "MERAH (TANDA BAHAYA)", color: "#dc2626" }
+      : Object.keys(assessment.warnings).length > 0
+        ? { label: "KUNING (PERLU PERHATIAN)", color: "#d97706" }
+        : { label: "HIJAU (NORMAL)", color: "#16a34a" };
 
-  const patientName = "Bunda Rahma";
   const hplStr = dueDate.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  const printedAt = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  // Sumbu grafik ikut melebar bila ada tekanan darah di atas 160 agar titiknya tidak terpotong
+  const bpMax = Math.max(160, ...chartData.map(d => d.sistolik ?? 0)) + 10;
 
-  function handlePrint() {
+  async function handlePrint() {
+    if (!reportRef.current || printing) return;
     setPrinting(true);
-    setTimeout(() => setPrinting(false), 1500);
+    try {
+      await printElement(reportRef.current, `Laporan TemanBunda - ${motherName} - ${printedAt}`);
+    } finally {
+      setPrinting(false);
+    }
   }
 
   return (
@@ -175,7 +195,7 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
         <p className="text-sm font-bold" style={{ color: t.dark }}>Pratinjau Laporan Rekam Medis</p>
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-white text-sm transition-all hover:brightness-95"
+          className="ui-interactive flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-white text-sm"
           style={{ background: t.grad }}
         >
           {printing
@@ -186,7 +206,7 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
       </div>
 
       {/* Report card */}
-      <div className="rounded-3xl overflow-hidden" style={{ background: "#ffffff", border: "1.5px solid #e5e7eb", boxShadow: "0 4px 32px rgba(0,0,0,0.08)" }}>
+      <div ref={reportRef} className="rounded-3xl overflow-hidden" style={{ background: "#ffffff", border: "1.5px solid #e5e7eb", boxShadow: "0 4px 32px rgba(0,0,0,0.08)" }}>
         {/* Report header */}
         <div className="px-8 pt-8 pb-6" style={{ borderBottom: "2px solid #1a1a2e" }}>
           <div className="flex items-start justify-between">
@@ -194,26 +214,12 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
               <h1 className="text-3xl font-extrabold leading-tight" style={{ color: "#1a1a2e", letterSpacing: "-0.5px" }}>
                 LAPORAN REKAM MEDIS MATERNAL
               </h1>
-              <p className="text-sm mt-1" style={{ color: "#6b7280" }}>BundaCare Integrated Clinical Summary System</p>
+              <p className="text-sm mt-1" style={{ color: "#6b7280" }}>TemanBunda · Ringkasan Pemantauan Kehamilan</p>
             </div>
-            {/* QR code mock */}
-            <div className="flex flex-col items-end gap-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9ca3af" }}>VALIDASI DIGITAL</p>
-              <div className="w-20 h-20 rounded-lg grid gap-0 p-1.5" style={{ background: "#1a1a2e" }}>
-                <div className="grid grid-cols-7 grid-rows-7 gap-px h-full w-full">
-                  {Array.from({ length: 49 }).map((_, i) => {
-                    const qrPattern = [
-                      0,0,0,0,0,0,0, 0,1,0,1,0,0,1, 0,0,0,0,0,0,0,
-                      1,1,1,0,1,1,0, 0,1,0,0,1,0,1, 1,0,1,0,0,1,0,
-                      0,1,0,1,1,0,1, 0,0,1,0,1,0,0,
-                    ];
-                    return (
-                      <div key={i} className="rounded-[1px]"
-                        style={{ background: qrPattern[i % qrPattern.length] === 0 ? "#ffffff" : "#1a1a2e" }} />
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Tanggal cetak (menggantikan "QR validasi" hiasan yang tidak bisa dipindai) */}
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Tanggal Cetak</p>
+              <p className="text-sm font-bold mt-1" style={{ color: "#1a1a2e" }}>{printedAt}</p>
             </div>
           </div>
         </div>
@@ -222,14 +228,14 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
         <div className="px-8 py-5" style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
           <div className="grid grid-cols-4 gap-6">
             {[
-              { label: "Nama Pasien",      value: patientName,                bold: false },
-              { label: "Usia Kandungan",   value: `${weeksPreg} Wk + 0 D`,   bold: false },
-              { label: "HPL Target",       value: hplStr,                     bold: false },
-              { label: "Kategori Risiko",  value: risikoKategori,             bold: true  },
-            ].map(({ label, value, bold }) => (
+              { label: "Nama Pasien",      value: motherName || "—",                         color: "#1a1a2e" },
+              { label: "Usia Kandungan",   value: `${weeksPreg} minggu ${daysExtra} hari`,   color: "#1a1a2e" },
+              { label: "HPL",              value: hplStr,                                     color: "#1a1a2e" },
+              { label: "Kategori Risiko",  value: risk.label,                                 color: risk.color },
+            ].map(({ label, value, color }) => (
               <div key={label}>
                 <p className="text-xs mb-1" style={{ color: "#9ca3af" }}>{label}</p>
-                <p className="text-base font-extrabold" style={{ color: bold ? "#16a34a" : "#1a1a2e" }}>{value}</p>
+                <p className="text-base font-extrabold" style={{ color }}>{value}</p>
               </div>
             ))}
           </div>
@@ -247,7 +253,7 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
                 { key: "diastolik", name: "Diastolik", color: "#f9a8d4" },
               ]}
               yMin={40}
-              yMax={160}
+              yMax={bpMax}
             />
           </div>
           {/* Weight chart */}
@@ -301,18 +307,18 @@ export function MedicalReportPreview({ t, vitalLogs, weeksPreg, dueDate }: {
 
         {/* Footer */}
         <div className="px-8 py-4 flex items-center justify-between" style={{ background: "#f9fafb", borderTop: "1px solid #e5e7eb" }}>
-          <p className="text-[10px]" style={{ color: "#9ca3af" }}>BundaCare · Maternal AI Platform · Dokumen ini dicetak secara digital · {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
-          <p className="text-[10px] font-bold" style={{ color: "#16a34a" }}>HIJAU — Risiko Normal</p>
+          <p className="text-[10px]" style={{ color: "#9ca3af" }}>TemanBunda · Ringkasan dari data yang dicatat pengguna, bukan pengganti pemeriksaan tenaga kesehatan · Dicetak {printedAt}</p>
+          <p className="text-[10px] font-bold" style={{ color: risk.color }}>Risiko: {risk.label}</p>
         </div>
       </div>
     </div>
   );
 }
 
-export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: {
-  t: Theme; weeksPreg: number; dueDate: Date;
+export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, daysExtra, dueDate, motherName }: {
+  t: Theme; weeksPreg: number; daysExtra: number; dueDate: Date; motherName: string;
   vitalLogs: VitalLog[];
-  onAddVital: (v: VitalLog) => void;
+  onAddVital: (v: VitalLog) => Promise<void>;
 }) {
   const [tab, setTab] = useState<"grafik" | "input" | "history" | "analisis">("grafik");
   const [showPdf, setShowPdf] = useState(false);
@@ -330,10 +336,6 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
     return () => { active = false; };
   }, [vitalLogs.length]);
 
-  const [form, setForm] = useState({ td:"", bb:"", fundus:"", gerakan:"", hb:"", protein:"Negatif" as VitalLog["protein"], catatan:"" });
-  function setF(k: keyof typeof form, v: string) { setForm(p => ({ ...p, [k]: v })); }
-  const formValid = form.td && form.bb && form.fundus;
-
   const latest = vitalLogs.at(-1);
   const sorted = [...vitalLogs].reverse();
 
@@ -341,20 +343,6 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
   const ITEMS_PER_PAGE = 5;
   const totalPages = Math.ceil(sorted.length / ITEMS_PER_PAGE) || 1;
   const paginatedLogs = sorted.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-
-  function handleSave() {
-    if (!formValid) return;
-    const now = new Date();
-    onAddVital({
-      id: `v${Date.now()}`,
-      date: now.toLocaleDateString("id-ID", { day:"numeric", month:"short", year:"numeric" }),
-      minggu: weeksPreg,
-      ...form,
-    });
-    setForm({ td:"", bb:"", fundus:"", gerakan:"", hb:"", protein:"Negatif", catatan:"" });
-    setTab("history");
-    setPage(1);
-  }
 
   const chartData = Object.values(
     vitalLogs.reduce<Record<number, { label: string; minggu: number; sistolik: number | null; diastolik: number | null; bb: number | null }>>(
@@ -393,7 +381,7 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
             <div className="ml-auto">
               <button
                 onClick={() => setShowPdf(v => !v)}
-                className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all"
+                className="ui-interactive flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold"
                 style={{ background: showPdf ? t.active : t.soft, color: showPdf ? "#fff" : t.active, border: `1.5px solid ${showPdf ? "transparent" : t.active}40` }}
               >
                 <FileText size={14} /> {showPdf ? "Tutup Laporan" : "Ekspor PDF"}
@@ -404,6 +392,7 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
           {/* ── Grafik tab ── */}
           {tab === "grafik" && (
             <div className="space-y-5">
+              <VitalDangerAlert vital={latest} />
               {/* Stat tiles */}
               {latest ? (
                 <div className="grid grid-cols-5 gap-3">
@@ -455,7 +444,7 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
                         { key: "sistolik",  name: "Sistolik",  color: t.active },
                         { key: "diastolik", name: "Diastolik", color: "#f9a8d4" },
                       ]}
-                      yMin={40} yMax={160}
+                      yMin={40} yMax={Math.max(160, ...chartData.map(d => d.sistolik ?? 0)) + 10}
                     />
                   ) : (
                     <p className="text-xs py-8 text-center" style={{ color: t.muted }}>Belum cukup data</p>
@@ -491,66 +480,8 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
               <p className="text-xs mb-4 leading-relaxed" style={{ color: t.muted }}>
                 Isi data dari hasil pemeriksaan ANC atau pengukuran mandiri.
               </p>
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                {[
-                  { key:"td",     label:"Tekanan Darah", placeholder:"cth: 118/76", hint:"mmHg"  },
-                  { key:"bb",     label:"Berat Badan",   placeholder:"cth: 68.5",   hint:"kg"    },
-                  { key:"fundus", label:"Tinggi Fundus", placeholder:"cth: 32",     hint:"cm"    },
-                  { key:"gerakan",label:"Gerakan Janin", placeholder:"cth: 8-10",   hint:"/2jam" },
-                  { key:"hb",     label:"Hemoglobin",    placeholder:"cth: 11.8",   hint:"g/dL"  },
-                ].map(({ key, label, placeholder, hint }) => (
-                  <div key={key}>
-                    <label className="text-[11px] font-bold block mb-1" style={{ color: t.dark }}>{label}</label>
-                    {key === "td" ? (
-                      <div className="relative flex items-center rounded-xl border-2 pr-12 transition-all overflow-hidden"
-                        style={{ borderColor: form.td ? t.primary : t.border, background: t.soft, color: t.dark }}>
-                        <input className="w-full bg-transparent text-center outline-none py-2.5 text-sm placeholder:text-gray-400"
-                          placeholder="118" value={form.td.split('/')[0] || ""}
-                          onChange={e => { const sys = e.target.value.replace(/\D/g,"").slice(0,3); const dia = form.td.split('/')[1]||""; setF("td", sys||dia?`${sys}/${dia}`:""); }} />
-                        <span className="text-sm font-black opacity-30">/</span>
-                        <input className="w-full bg-transparent text-center outline-none py-2.5 text-sm placeholder:text-gray-400"
-                          placeholder="76" value={form.td.split('/')[1] || ""}
-                          onChange={e => { const sys = form.td.split('/')[0]||""; const dia = e.target.value.replace(/\D/g,"").slice(0,3); setF("td", sys||dia?`${sys}/${dia}`:""); }} />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px]" style={{ color: t.muted }}>{hint}</span>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <input className="w-full rounded-xl px-3 py-2.5 text-sm outline-none border-2 transition-all pr-12"
-                          style={{ borderColor: form[key as keyof typeof form] ? t.primary : t.border, background: t.soft, color: t.dark }}
-                          placeholder={placeholder} value={form[key as keyof typeof form]}
-                          onChange={e => {
-                            let v = e.target.value;
-                            if (key==="bb"||key==="fundus"||key==="hb") { v=v.replace(/[^\d.]/g,""); if(v.split(".").length>2) v=v.substring(0,v.length-1); }
-                            else if (key==="gerakan") v=v.replace(/[^\d-]/g,"");
-                            setF(key as keyof typeof form, v);
-                          }} />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px]" style={{ color: t.muted }}>{hint}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div>
-                  <label className="text-[11px] font-bold block mb-1" style={{ color: t.dark }}>Protein Urin</label>
-                  <select className="w-full rounded-xl px-3 py-2.5 text-sm outline-none border-2 transition-all"
-                    style={{ borderColor: t.border, background: t.soft, color: t.dark }}
-                    value={form.protein} onChange={e => setF("protein", e.target.value)}>
-                    {["Negatif", "+", "++", "+++"].map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="mb-4">
-                <label className="text-[11px] font-bold block mb-1" style={{ color: t.dark }}>Catatan Tambahan (opsional)</label>
-                <textarea rows={2} className="w-full rounded-xl px-3 py-2.5 text-sm outline-none border-2 transition-all resize-none"
-                  style={{ borderColor: t.border, background: t.soft, color: t.dark }}
-                  placeholder="cth: sedikit pusing, kaki bengkak ringan…"
-                  value={form.catatan} onChange={e => setF("catatan", e.target.value)} />
-              </div>
-              <div className="flex gap-3">
-                <PillBtn variant="active" size="md" onClick={handleSave} disabled={!formValid} t={t}>
-                  <Check size={15} /> Simpan Data Vital
-                </PillBtn>
-                <PillBtn variant="outline" size="md" onClick={() => setTab("grafik")} t={t}>Batal</PillBtn>
-              </div>
+              <VitalEntryForm t={t} weeksPreg={weeksPreg} onAddVital={onAddVital}
+                onCancel={() => setTab("grafik")} onSaved={() => { setTab("history"); setPage(1); }} />
             </div>
           )}
 
@@ -858,7 +789,7 @@ export function ReportsScreen({ t, vitalLogs, onAddVital, weeksPreg, dueDate }: 
         {/* PDF preview — shown only when user clicks Ekspor PDF */}
         {showPdf && (
           <div className="mt-5">
-            <MedicalReportPreview t={t} vitalLogs={vitalLogs} weeksPreg={weeksPreg} dueDate={dueDate} />
+            <MedicalReportPreview t={t} vitalLogs={vitalLogs} weeksPreg={weeksPreg} daysExtra={daysExtra} dueDate={dueDate} motherName={motherName} />
           </div>
         )}
       </div>

@@ -71,6 +71,8 @@ class PregnancyResponse(PregnancyCreate):
     companion_id: UUID | None = None
     due_date: date
     sync_code: str
+    sync_code_expires_at: datetime
+    sync_code_used_at: datetime | None = None
     birth_at: datetime | None = None
     postpartum_admin: dict[str, bool] = {}
     created_at: datetime

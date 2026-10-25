@@ -52,6 +52,7 @@ function toEmergencyAlert(row: EmergencyAlertRow | null): EmergencyAlert | null 
 
 export function useAppData(user: User | null) {
   const [hasPregnancy, setHasPregnancy] = useState<boolean | null>(null);
+  const [companionConnected, setCompanionConnected] = useState(false);
   // Peran akun dari profiles.role (dipilih saat daftar); menentukan tampilan Ibu atau Suami
   const [role, setRole] = useState<Mode | null>(null);
   // Tanggal lokal user dikirim ke server agar "hari ini" mengikuti WIB, bukan jam UTC server
@@ -78,6 +79,7 @@ export function useAppData(user: User | null) {
     doctor: "dr. Ratna, Sp.OG",
     bloodType: "A+",
     syncCode: "MELA-8821",
+    syncCodeExpiresAt: "",
     notifVitamin: true,
     notifAnc: true,
     notifEmergencySound: true,
@@ -102,6 +104,7 @@ export function useAppData(user: User | null) {
         const companion = memberResult?.members.find(member => member.role === "companion");
         setRole(profile.role === "companion" ? "companion" : "mother");
         setHasPregnancy(Boolean(pregnancy));
+        setCompanionConnected(Boolean(pregnancy?.companion_id));
         setPregnancyId(pregnancy?.id ?? null);
         setBirthAt(pregnancy?.birth_at ? new Date(pregnancy.birth_at) : null);
         setPostpartumAdmin(pregnancy?.postpartum_admin ?? {});
@@ -120,6 +123,7 @@ export function useAppData(user: User | null) {
           doctor: pregnancy ? pregnancy.doctor || "" : previous.doctor,
           bloodType: pregnancy ? pregnancy.blood_type || "" : previous.bloodType,
           syncCode: pregnancy?.sync_code || previous.syncCode,
+          syncCodeExpiresAt: pregnancy?.sync_code_expires_at || previous.syncCodeExpiresAt,
           notifVitamin: profile.notif_vitamin,
           notifAnc: profile.notif_anc,
           notifEmergencySound: profile.notif_emergency_sound,
@@ -248,6 +252,13 @@ export function useAppData(user: User | null) {
       .catch(error => console.error("Failed to save symptom", error));
   }
 
+  async function unpairPregnancy() {
+    await api.unpairPregnancy();
+    setCompanionConnected(false);
+    setUserProfile(previous => ({ ...previous, syncCode: "", syncCodeExpiresAt: "" }));
+    if (role === "companion") setHasPregnancy(false);
+  }
+
   async function saveVitamins(next: Vitamin[]) {
     const previous = vitamins;
     setVitamins(next);
@@ -275,6 +286,7 @@ export function useAppData(user: User | null) {
     alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
     addVital, toggleVitamin, toggleSymptom, saveVitamins,
+    companionConnected, unpairPregnancy,
     birthAt, postpartumAdmin, confirmBirth, cancelBirth, togglePostpartumAdmin,
   };
 }

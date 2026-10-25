@@ -42,12 +42,20 @@ function SettingsModal({
   onClose,
   t,
   profile,
+  mode,
+  companionConnected,
+  onUnpair,
+  onCodeGenerated,
   onSave,
 }: {
   isOpen: boolean;
   onClose: () => void;
   t: Theme;
   profile: UserProfile;
+  mode: Mode;
+  companionConnected: boolean;
+  onUnpair: () => Promise<void>;
+  onCodeGenerated: (pregnancy: import("../services/api").Pregnancy) => void;
   onSave: (newProfile: UserProfile) => void;
 }) {
   if (!isOpen) return null;
@@ -56,6 +64,8 @@ function SettingsModal({
   const [formData, setFormData] = useState<UserProfile>({ ...profile });
   const [copied, setCopied] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -92,6 +102,40 @@ function SettingsModal({
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");
+  };
+
+  const handleGenerateCode = async () => {
+    setSyncBusy(true);
+    setSyncMessage("");
+    try {
+      const pregnancy = await api.createSyncCode();
+      setFormData(previous => ({
+        ...previous,
+        syncCode: pregnancy.sync_code,
+        syncCodeExpiresAt: pregnancy.sync_code_expires_at,
+      }));
+      onCodeGenerated(pregnancy);
+      setSyncMessage("Kode baru berhasil dibuat dan berlaku selama 15 menit.");
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Kode gagal dibuat.");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const handleUnpair = async () => {
+    if (!window.confirm("Putuskan hubungan akun dengan pasangan?")) return;
+    setSyncBusy(true);
+    setSyncMessage("");
+    try {
+      await onUnpair();
+      setFormData(previous => ({ ...previous, syncCode: "", syncCodeExpiresAt: "" }));
+      setSyncMessage("Akun pasangan berhasil diputuskan.");
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Hubungan akun gagal diputuskan.");
+    } finally {
+      setSyncBusy(false);
+    }
   };
 
   return (
@@ -277,6 +321,23 @@ function SettingsModal({
             {/* TAB 3: SINKRONISASI */}
             {activeTab === "sync" && (
               <div className="space-y-4">
+                {mode === "mother" && !companionConnected ? (
+                  <div className="rounded-2xl p-5 border text-center space-y-3" style={{ borderColor: t.border, background: "#fcfcfc" }}>
+                    <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto">
+                      <Smartphone size={24} />
+                    </div>
+                    <p className="text-sm font-bold" style={{ color: t.dark }}>Bagikan kode kepada Ayah</p>
+                    <p className="text-xs" style={{ color: t.muted }}>Ayah memasukkan kode ini di HP-nya. Setelah benar, akun langsung terhubung tanpa konfirmasi tambahan.</p>
+                    <div className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 border bg-white shadow-sm" style={{ borderColor: t.border }}>
+                      <span className="text-xl font-black tracking-widest" style={{ color: t.dark, fontFamily: "monospace" }}>{formData.syncCode || "------"}</span>
+                      <button onClick={handleCopyCode} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Salin kode"><Copy size={16} color={t.active} /></button>
+                    </div>
+                    <p className="text-[11px]" style={{ color: t.muted }}>
+                      {formData.syncCodeExpiresAt ? `Berlaku sampai ${new Date(formData.syncCodeExpiresAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : "Buat kode baru sebelum dibagikan kepada Ayah."}
+                    </p>
+                    <button onClick={() => void handleGenerateCode()} disabled={syncBusy} className="text-xs font-bold disabled:opacity-50" style={{ color: t.active }}>Buat kode baru</button>
+                  </div>
+                ) : (
                 <div className="rounded-2xl p-5 border text-center space-y-3" style={{ borderColor: t.border, background: "#fcfcfc" }}>
                   <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto">
                     <CheckCheck size={24} />
@@ -301,9 +362,10 @@ function SettingsModal({
                   </div>
                   {copied && <p className="text-xs font-bold text-green-600">Kode berhasil disalin!</p>}
                 </div>
-                <p className="text-xs text-center" style={{ color: t.muted }}>
-                  Suami dapat memasukkan kode di atas saat login sebagai Mode Pendamping untuk memantau grafik kesehatan & menerima notifikasi darurat secara realtime.
-                </p>
+                )}
+                {syncMessage && <p className="text-xs text-center font-semibold" style={{ color: syncMessage.includes("berhasil") ? "#15803d" : "#dc2626" }}>{syncMessage}</p>}
+                {companionConnected && <button onClick={() => void handleUnpair()} disabled={syncBusy} className="w-full rounded-xl border py-2.5 text-xs font-bold text-red-600 disabled:opacity-50" style={{ borderColor: "#fecaca" }}>Putuskan hubungan pasangan</button>}
+                {!companionConnected && mode === "mother" && <p className="text-xs text-center" style={{ color: t.muted }}>Setelah Ayah memasukkan kode yang benar, banner akun tersinkronisasi akan muncul di sini.</p>}
               </div>
             )}
 
@@ -473,9 +535,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const {
-    role, hasPregnancy, loadError, retryLoad, alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
+    role, hasPregnancy, companionConnected, loadError, retryLoad, alert, sendAlert, ackAlert, resolveAlert, vitalLogs, vitDone, setVitDone, symptoms, setSymptoms,
     vitamins, setVitamins, customSymptoms, setCustomSymptoms, userProfile, setUserProfile,
     addVital, toggleVitamin, toggleSymptom, saveVitamins,
+    unpairPregnancy,
     birthAt, postpartumAdmin, confirmBirth, cancelBirth, togglePostpartumAdmin,
   } = useAppData(user);
   const {
@@ -894,7 +957,7 @@ export default function App() {
               <button 
                 onClick={() => setShowProfile(!showProfile)}
                 onBlur={() => setTimeout(() => setShowProfile(false), 200)}
-                className="ui-interactive w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm focus:outline-none" 
+                className="ui-interactive w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm focus:outline-none"
                 style={{ 
                   background: t.grad,
                   boxShadow: showProfile ? `0 0 0 3px ${t.shadow}` : "none"
@@ -1013,6 +1076,14 @@ export default function App() {
         onClose={() => setShowSettings(false)}
         t={t}
         profile={userProfile}
+        mode={mode}
+        companionConnected={companionConnected}
+        onUnpair={unpairPregnancy}
+        onCodeGenerated={(pregnancy) => setUserProfile(previous => ({
+          ...previous,
+          syncCode: pregnancy.sync_code,
+          syncCodeExpiresAt: pregnancy.sync_code_expires_at,
+        }))}
         onSave={(updated) => {
           setUserProfile(updated);
           void Promise.all([
@@ -1166,4 +1237,3 @@ function CustomerServiceModal({ isOpen, onClose, t }: { isOpen: boolean; onClose
 
 
 // ─── Postpartum Screen ────────────────────────────────────────────────────────
-

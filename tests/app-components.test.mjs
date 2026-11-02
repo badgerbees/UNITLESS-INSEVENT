@@ -8,13 +8,14 @@ const server = await createServer({
   configFile: false,
   appType: "custom",
   esbuild: { jsx: "automatic" },
-  server: { middlewareMode: true, watch: null },
+  server: { middlewareMode: true, watch: null, hmr: false },
   optimizeDeps: { noDiscovery: true },
 });
 after(() => server.close());
 
 const { AppHeader } = await server.ssrLoadModule("/src/app/AppHeader.tsx");
 const { SettingsModal } = await server.ssrLoadModule("/src/app/SettingsModal.tsx");
+const { PregnancySetupScreen } = await server.ssrLoadModule("/src/pages/PregnancySetupScreen.tsx");
 const { getScreenLabels, getNavigationItems } = await server.ssrLoadModule("/src/app/appNavigation.ts");
 const { THEMES } = await server.ssrLoadModule("/src/constants/theme.ts");
 const profile = {
@@ -67,4 +68,23 @@ test("settings displays the paired companion name supplied by account data", () 
 test("postpartum navigation changes preparation entry and preserves other pages", () => {
   assert.deepEqual(getNavigationItems(false).map(item => item.id), ["dashboard", "health", "calendar", "reports", "resources"]);
   assert.deepEqual(getNavigationItems(true).map(item => item.id), ["dashboard", "health", "calendar", "reports", "postpartum"]);
+});
+
+test("companion onboarding only asks for the mother's pairing code", () => {
+  const html = renderToStaticMarkup(createElement(PregnancySetupScreen, {
+    t: THEMES.companion, mode: "companion", onCreated: noop,
+  }));
+  assert.match(html, /Hubungkan ke akun Ibu/);
+  assert.match(html, /Kode sinkronisasi pasangan/);
+  assert.match(html, /Gabung dengan pasangan/);
+  assert.doesNotMatch(html, /Tanggal HPHT|Golongan darah|Rumah sakit \/ klinik/);
+});
+
+test("mother onboarding retains pregnancy form and offers companion connection", () => {
+  const html = renderToStaticMarkup(createElement(PregnancySetupScreen, {
+    t: THEMES.mother, mode: "mother", onCreated: noop,
+  }));
+  assert.match(html, /Tanggal HPHT/);
+  assert.match(html, /Mulai menggunakan aplikasi/);
+  assert.match(html, /Saya Suami \/ Pendamping — Hubungkan ke akun Ibu/);
 });

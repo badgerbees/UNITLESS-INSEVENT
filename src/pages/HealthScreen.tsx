@@ -216,8 +216,9 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
 
   const activeSyms = symList.filter(s => symptoms[s.id]);
   const risk: Risk = activeSyms.some(s => s.risk === "red") ? "red" : activeSyms.some(s => s.risk === "yellow") ? "yellow" : "green";
-  const riskColor  = { green: "#22c55e", yellow: "#f59e0b", red: "#ef4444" };
-  const riskLabel  = { green: "Status Normal", yellow: "Perlu Perhatian", red: "Tanda Bahaya" };
+  const hasSymptomRecords = Object.keys(symptoms).length > 0;
+  const riskColor = { green: hasSymptomRecords ? "#22c55e" : "#64748b", yellow: "#f59e0b", red: "#ef4444" };
+  const riskLabel = { green: hasSymptomRecords ? (activeSyms.length ? "Gejala ringan tercatat" : "Tidak ada gejala aktif tercatat") : "Belum ada catatan gejala", yellow: "Perlu Perhatian", red: "Tanda Bahaya" };
 
   // Gejala tambahan dari user hanya dicatat — tidak memengaruhi status risiko
   function addCustomSymptom() {
@@ -259,7 +260,7 @@ export function HealthScreen({ t, onEmergency, vitalLogs, onAddVital, vitDone, s
         <div>
           <p className="text-base font-extrabold" style={{ color: riskColor[risk] }}>{riskLabel[risk]}</p>
           <p className="text-sm" style={{ color: t.muted }}>
-            {risk === "green" && "Kondisi baik. Terus pantau gejala harian Anda."}
+            {risk === "green" && (hasSymptomRecords ? "Berdasarkan gejala yang dicatat hari ini; bukan diagnosis medis." : "Isi pemantauan hari ini untuk mencatat kondisi Bunda.")}
             {risk === "yellow" && "Perhatikan kondisi dan konsultasikan pada ANC berikutnya."}
             {risk === "red" && "Segera hubungi dokter atau pergi ke unit gawat darurat."}
           </p>

@@ -126,12 +126,12 @@ def pair_pregnancy(
         .is_("companion_id", "null")
         .is_("sync_code_used_at", "null")
         .gt("sync_code_expires_at", now)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
-    pregnancy = result.data
-    if not pregnancy:
+    if result is None or not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kode tidak ditemukan atau sudah kedaluwarsa")
+    pregnancy = result.data[0]
     if pregnancy["mother_id"] == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The mother cannot pair with herself")
     if pregnancy.get("companion_id") not in (None, current_user.id):
@@ -141,15 +141,15 @@ def pair_pregnancy(
         supabase.table("pregnancies")
         .update({"companion_id": current_user.id, "sync_code_used_at": now})
         .eq("id", pregnancy["id"])
+        .eq("sync_code", payload.sync_code.strip().upper())
         .is_("companion_id", "null")
         .is_("sync_code_used_at", "null")
-        .select("*")
-        .single()
+        .gt("sync_code_expires_at", datetime.now(timezone.utc).isoformat())
         .execute()
     )
     if not paired.data:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kode sudah digunakan oleh akun lain")
-    return paired.data
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Kode sudah digunakan, diperbarui, atau kedaluwarsa. Minta kode baru dari Ibu.")
+    return paired.data[0]
 
 
 @router.post("/sync-code")
@@ -201,6 +201,9 @@ def unpair_pregnancy(current_user: CurrentUser = Depends(get_current_user)) -> d
 
 def _profile_role(current_user: CurrentUser) -> str | None:
     """Peran akun dari profiles.role, ditetapkan saat daftar ('mother' atau 'companion')."""
+    # A broken legacy trigger must never let a registered companion create a pregnancy.
+    if current_user.signup_role == "companion":
+        return "companion"
     result = get_supabase_admin().table("profiles").select("role").eq("id", current_user.id).limit(1).execute()
     return result.data[0]["role"] if result.data else None
 

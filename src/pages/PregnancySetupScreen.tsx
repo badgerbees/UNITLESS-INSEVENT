@@ -5,6 +5,7 @@ import { api } from "../services/api";
 import { APP_NAME } from "../constants/brand";
 
 export function PregnancySetupScreen({ t, mode, onCreated }: { t: Theme; mode: Mode; onCreated: () => void }) {
+  const [setupMode, setSetupMode] = useState(mode);
   const [hphtDate, setHphtDate] = useState("");
   const [bloodType, setBloodType] = useState("A+");
   const [hospital, setHospital] = useState("");
@@ -17,7 +18,7 @@ export function PregnancySetupScreen({ t, mode, onCreated }: { t: Theme; mode: M
     setError(null);
     setSaving(true);
     try {
-      if (mode === "mother") {
+      if (setupMode === "mother") {
         if (!hphtDate) throw new Error("Tanggal HPHT wajib diisi.");
         await api.createPregnancy({ hpht_date: hphtDate, blood_type: bloodType, hospital: hospital || undefined, doctor: doctor || undefined });
       } else {
@@ -27,6 +28,19 @@ export function PregnancySetupScreen({ t, mode, onCreated }: { t: Theme; mode: M
       onCreated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Data kehamilan gagal disimpan.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function connectToMother() {
+    setError(null);
+    setSaving(true);
+    try {
+      await api.becomeCompanion();
+      setSetupMode("companion");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal menyiapkan akun pendamping.");
     } finally {
       setSaving(false);
     }
@@ -42,13 +56,19 @@ export function PregnancySetupScreen({ t, mode, onCreated }: { t: Theme; mode: M
           <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-white mb-4" style={{ background: t.grad }}>
             <Baby size={30} />
           </div>
-          <h1 className="text-2xl font-extrabold" style={{ color: t.dark }}>Siapkan data kehamilan</h1>
+          <h1 className="text-2xl font-extrabold" style={{ color: t.dark }}>{setupMode === "mother" ? "Siapkan data kehamilan" : "Hubungkan ke akun Ibu"}</h1>
           <p className="text-sm mt-2" style={{ color: t.muted }}>
-            {mode === "mother" ? `Tambahkan data awal agar ${APP_NAME} dapat menampilkan informasi yang sesuai.` : "Masukkan kode dari akun ibu untuk bergabung sebagai pendamping."}
+            {setupMode === "mother" ? `Tambahkan data awal agar ${APP_NAME} dapat menampilkan informasi yang sesuai.` : "Data kehamilan sudah diisi oleh Ibu. Masukkan kode dari Pengaturan Akun Ibu → Sinkronisasi Pasangan untuk terhubung."}
           </p>
         </div>
 
-        {mode === "mother" ? (
+        {setupMode === "mother" && (
+          <button type="button" onClick={() => void connectToMother()} disabled={saving} className="w-full mb-6 rounded-2xl border px-4 py-3 text-sm font-bold disabled:opacity-60" style={{ borderColor: t.border, color: t.active, background: t.soft }}>
+            Saya Suami / Pendamping — Hubungkan ke akun Ibu
+          </button>
+        )}
+
+        {setupMode === "mother" ? (
           <div className="space-y-4">
             <label className="block text-xs font-bold" style={{ color: t.dark }}>
               Tanggal HPHT
@@ -74,13 +94,13 @@ export function PregnancySetupScreen({ t, mode, onCreated }: { t: Theme; mode: M
         ) : (
           <label className="block text-xs font-bold" style={{ color: t.dark }}>
             Kode sinkronisasi pasangan
-            <input value={syncCode} onChange={event => setSyncCode(event.target.value.toUpperCase())} className={`${inputClass} mt-1.5`} style={inputStyle} placeholder="Contoh: ABCD1234" />
+            <input value={syncCode} onChange={event => setSyncCode(event.target.value.toUpperCase())} className={`${inputClass} mt-1.5`} style={inputStyle} placeholder="Contoh: ABC234" autoComplete="off" />
           </label>
         )}
 
         {error && <p className="mt-4 text-center text-xs font-semibold text-red-600">{error}</p>}
         <button onClick={() => void submit()} disabled={saving} className="w-full mt-6 rounded-full py-3.5 text-sm font-bold text-white disabled:opacity-60" style={{ background: t.grad }}>
-          {saving ? "Menyimpan..." : mode === "mother" ? "Mulai menggunakan aplikasi" : "Gabung dengan pasangan"}
+          {saving ? "Menyimpan..." : setupMode === "mother" ? "Mulai menggunakan aplikasi" : "Gabung dengan pasangan"}
         </button>
       </div>
     </div>

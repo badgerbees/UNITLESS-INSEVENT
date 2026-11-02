@@ -13,6 +13,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class CurrentUser:
     id: str
     email: str | None
+    signup_role: str | None = None
 
 
 def get_current_user(
@@ -39,4 +40,8 @@ def get_current_user(
             detail="Invalid or expired authentication token",
         )
 
-    return CurrentUser(id=str(user.id), email=user.email)
+    return CurrentUser(
+        id=str(user.id),
+        email=user.email,
+        signup_role=(user.user_metadata or {}).get("role"),
+    )

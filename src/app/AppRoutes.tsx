@@ -58,8 +58,8 @@ type AppRoutesProps = {
 
 export function AppRoutes(props: AppRoutesProps) {
   const dashboard = props.mode === "mother"
-    ? <MotherDashboard t={props.t} weeksPreg={props.weeksPreg} daysExtra={props.daysExtra} daysUntilDue={props.daysUntilDue} dueDate={props.dueDate} fruit={props.fruit} trimester={props.trimester} onEmergency={props.onEmergency} onGoHealth={props.onGoHealth} onGoCalendar={props.onGoCalendar} vitDone={props.vitDone} vitamins={props.vitamins} symptoms={props.symptoms} motherName={props.motherName} />
-    : <CompanionDashboard t={props.t} weeksPreg={props.weeksPreg} daysExtra={props.daysExtra} alert={props.alert} onAck={props.onAck} motherName={props.motherName} />;
+    ? <MotherDashboard t={props.t} weeksPreg={props.weeksPreg} daysExtra={props.daysExtra} daysUntilDue={props.daysUntilDue} dueDate={props.dueDate} fruit={props.fruit} trimester={props.trimester} onEmergency={props.onEmergency} onGoHealth={props.onGoHealth} onGoCalendar={props.onGoCalendar} motherName={props.motherName} />
+    : <CompanionDashboard t={props.t} weeksPreg={props.weeksPreg} daysExtra={props.daysExtra} alert={props.alert} onAck={props.onAck} motherName={props.motherName} motherPhone={props.motherPhone} onGoCalendar={props.onGoCalendar} onGoHealth={props.onGoHealth} onEmergency={props.onEmergency} />;
 
   return (
     <Routes>

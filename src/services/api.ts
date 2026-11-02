@@ -159,6 +159,7 @@ export type EmergencyAlertRow = {
 
 export const api = {
   getMe: () => request<Profile>("/me"),
+  becomeCompanion: () => request<Profile>("/me/companion", { method: "POST" }),
   updateMe: (payload: { full_name?: string | null; phone?: string | null }) => request<Profile>("/me", {
     method: "PATCH",
     body: JSON.stringify(payload),

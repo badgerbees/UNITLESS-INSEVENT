@@ -26,6 +26,10 @@ def get_me(current_user: CurrentUser = Depends(get_current_user)) -> dict:
             detail="Profile not found",
         )
 
+    if current_user.signup_role == "companion" and result.data["role"] == "mother":
+        # Repair legacy signup triggers before onboarding, without discarding pregnancy records.
+        return become_companion(current_user)
+
     return result.data
 
 
@@ -85,6 +89,33 @@ def update_email(
 
     updated_email = getattr(result.user, "email", None) or email
     return {"email": updated_email}
+
+
+@router.post("/companion")
+def become_companion(current_user: CurrentUser = Depends(get_current_user)) -> dict:
+    supabase = get_supabase_admin()
+    pregnancy = (
+        supabase.table("pregnancies")
+        .select("id")
+        .or_(f"mother_id.eq.{current_user.id},companion_id.eq.{current_user.id}")
+        .limit(1)
+        .execute()
+    )
+    if pregnancy.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Akun ini sudah memiliki data kehamilan. Peran belum diubah agar data tetap aman. Hubungi pengelola untuk memperbaiki akun.",
+        )
+
+    result = (
+        supabase.table("profiles")
+        .update({"role": "companion"})
+        .eq("id", current_user.id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    return result.data[0]
 
 
 @router.post("/password")

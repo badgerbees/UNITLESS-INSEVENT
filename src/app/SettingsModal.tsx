@@ -119,6 +119,8 @@ export function SettingsModal({
 
   if (!isOpen) return null;
 
+  const syncCodeExpired = !formData.syncCodeExpiresAt || new Date(formData.syncCodeExpiresAt).getTime() <= Date.now();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div
@@ -311,10 +313,10 @@ export function SettingsModal({
                     <p className="text-xs" style={{ color: t.muted }}>Ayah memasukkan kode ini di HP-nya. Setelah benar, akun langsung terhubung tanpa konfirmasi tambahan.</p>
                     <div className="inline-flex items-center gap-2 rounded-2xl px-5 py-3 border bg-white shadow-sm" style={{ borderColor: t.border }}>
                       <span className="text-xl font-black tracking-widest" style={{ color: t.dark, fontFamily: "monospace" }}>{formData.syncCode || "------"}</span>
-                      <button onClick={handleCopyCode} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Salin kode"><Copy size={16} color={t.active} /></button>
+                      <button onClick={handleCopyCode} disabled={syncCodeExpired} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50" title="Salin kode"><Copy size={16} color={t.active} /></button>
                     </div>
-                    <p className="text-[11px]" style={{ color: t.muted }}>
-                      {formData.syncCodeExpiresAt ? `Berlaku sampai ${new Date(formData.syncCodeExpiresAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}.` : "Buat kode baru sebelum dibagikan kepada Ayah."}
+                    <p className="text-[11px]" style={{ color: syncCodeExpired ? "#dc2626" : t.muted }}>
+                      {syncCodeExpired ? "Kode sudah kedaluwarsa. Klik Buat kode baru sebelum dibagikan kepada Ayah." : `Berlaku sampai ${new Date(formData.syncCodeExpiresAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`}
                     </p>
                     <button onClick={() => void handleGenerateCode()} disabled={syncBusy} className="text-xs font-bold disabled:opacity-50" style={{ color: t.active }}>Buat kode baru</button>
                   </div>

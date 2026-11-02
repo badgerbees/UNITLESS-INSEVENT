@@ -136,18 +136,9 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
   t: Theme; motherName: string; fatherName: string; dueDate: Date; hospital: string; doctor: string;
 }) {
   const birthPlanDocRef = useRef<HTMLDivElement>(null);
-  const [items, setItems] = useState<Record<string, boolean>>({
-    baju_ibu: true, pembalut: true, sabun: true,
-    baju_bayi: true, selimut: true, popok: false,
-    bpjs: false, ktp: false, buku_pink: false, charger: true,
-  });
+  const [items, setItems] = useState<Record<string, boolean>>({});
   
-  const [cats, setCats] = useState([
-    { id: "ibu",  label: "Ibu",       items: [{ id: "baju_ibu", l: "Baju ganti (3 stel)"  }, { id: "pembalut", l: "Pembalut bersalin"   }, { id: "sabun",     l: "Perlengkapan mandi" }] },
-    { id: "bayi", label: "Bayi",      items: [{ id: "baju_bayi", l: "Baju bayi (5 stel)"  }, { id: "selimut",  l: "Selimut bedong"     }, { id: "popok",     l: "Popok newborn"      }] },
-    { id: "dok",  label: "Dokumen",   items: [{ id: "bpjs", l: "Kartu BPJS"               }, { id: "ktp",      l: "KTP suami-istri"    }, { id: "buku_pink", l: "Buku KIA"           }] },
-    { id: "lain", label: "Lain-lain", items: [{ id: "charger", l: "Charger & powerbank"   }] },
-  ]);
+  const [cats, setCats] = useState<{ id: string; label: string; items: { id: string; l: string }[] }[]>([]);
 
   const [editMode, setEditMode] = useState(false);
   const [newInputs, setNewInputs] = useState<Record<string, string>>({});
@@ -164,20 +155,17 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
 
   const total   = cats.reduce((acc, cat) => acc + cat.items.length, 0);
   const doneCnt = cats.reduce((acc, cat) => acc + cat.items.filter(i => items[i.id]).length, 0);
   const pct     = total === 0 ? 0 : Math.round((doneCnt / total) * 100);
 
-  const [birthPlan, setBirthPlan] = useState<Record<string, boolean>>({
-    imd: true,
-    suami: true,
-    epidural: false,
-    tali_pusat: true,
-    rooming: true,
-  });
+  const [birthPlan, setBirthPlan] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError(false);
     let active = true;
     let pending = 2;
     const completeRequest = () => {
@@ -187,7 +175,7 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
 
     api.getChecklist()
       .then(remoteCategories => {
-        if (!active || remoteCategories.length === 0) return;
+        if (!active) return;
         setCats(remoteCategories.map(category => ({
           id: category.id,
           label: category.name,
@@ -203,8 +191,8 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
 
     api.getBirthPlan()
       .then(remotePlan => {
-        if (!active || remotePlan.length === 0) return;
-        setBirthPlan(previous => ({ ...previous, ...Object.fromEntries(remotePlan.map(option => [option.option_key, option.selected])) }));
+        if (!active) return;
+        setBirthPlan(Object.fromEntries(remotePlan.map(option => [option.option_key, option.selected])));
       })
       .catch(error => {
         if (active) setLoadError(true);
@@ -213,10 +201,14 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
       .finally(completeRequest);
 
     return () => { active = false; };
-  }, []);
+  }, [reload]);
 
   // Saat halaman ditinggal, hapus yang masih tertunda langsung dikirim
   useEffect(() => () => commitPendingDelete(), []);
+
+  if (loadError && !loading) {
+    return <div role="alert" className="rounded-3xl p-8 text-center" style={{ background: t.card, border: `1px solid ${t.border}` }}><p className="text-sm" style={{ color: t.dark }}>Data persiapan belum dapat dimuat.</p><button onClick={() => setReload(value => value + 1)} className="mt-3 text-sm font-bold" style={{ color: t.active }}>Coba lagi</button></div>;
+  }
 
   if (loading) {
     return (
@@ -340,11 +332,6 @@ export function ResourcesScreen({ t, motherName, fatherName, dueDate, hospital, 
 
   return (
     <div className="space-y-5 w-full">
-      {loadError && (
-        <div className="rounded-2xl px-4 py-3 text-xs" style={{ background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" }}>
-          Data tersimpan belum dapat dimuat. Tampilan sementara digunakan; coba muat ulang halaman.
-        </div>
-      )}
       <div className="rounded-3xl p-6 flex items-center gap-6" style={{ background: t.grad }}>
         <div className="flex-1">
           <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>Kesiapan Tas Persalinan</p>

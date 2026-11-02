@@ -35,6 +35,19 @@ def test_mother_cannot_pair_with_sync_code(monkeypatch) -> None:
     assert response.status_code == 403
 
 
+def test_registered_companion_cannot_create_pregnancy_with_stale_profile(monkeypatch):
+    def unexpected_database_access():
+        raise AssertionError("Signup role must block pregnancy creation before database access")
+
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="user-1", email="user@example.com", signup_role="companion")
+    monkeypatch.setattr(pregnancies, "get_supabase_admin", unexpected_database_access)
+    try:
+        response = client.post("/api/pregnancies", json={"hpht_date": "2026-01-12"})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
 def test_pregnancy_routes_require_authentication() -> None:
     assert client.get("/api/pregnancies/current").status_code == 401
     assert client.patch("/api/pregnancies/current", json={"birth_at": None}).status_code == 401

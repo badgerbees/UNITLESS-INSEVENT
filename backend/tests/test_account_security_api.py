@@ -99,3 +99,88 @@ def test_account_password_update_requires_authentication() -> None:
         json={"current_password": "old-password", "new_password": "new-password"},
     )
     assert response.status_code == 401
+
+
+def test_companion_onboarding_requires_authentication():
+    assert client.post("/api/me/companion").status_code == 401
+
+
+def test_companion_onboarding_corrects_only_the_current_profile(account_clients):
+    admin, _ = account_clients
+    pregnancy_query = Mock()
+    profile_query = Mock()
+    admin.table.side_effect = lambda name: {"pregnancies": pregnancy_query, "profiles": profile_query}[name]
+    pregnancy_query.select.return_value.or_.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[])
+    profile_query.update.return_value.eq.return_value.execute.return_value = SimpleNamespace(data=[{"id": "user-1", "role": "companion"}])
+
+    response = client.post("/api/me/companion")
+
+    assert response.status_code == 200
+    assert response.json() == {"id": "user-1", "role": "companion"}
+    profile_query.update.assert_called_once_with({"role": "companion"})
+    profile_query.update.return_value.eq.assert_called_once_with("id", "user-1")
+    pregnancy_query.select.return_value.or_.assert_called_once_with("mother_id.eq.user-1,companion_id.eq.user-1")
+
+
+def test_companion_onboarding_preserves_accounts_with_pregnancy_data(account_clients):
+    admin, _ = account_clients
+    pregnancy_query = admin.table.return_value
+    pregnancy_query.select.return_value.or_.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[{"id": "existing-pregnancy"}])
+
+    response = client.post("/api/me/companion")
+
+    assert response.status_code == 409
+    admin.table.assert_called_once_with("pregnancies")
+    pregnancy_query.update.assert_not_called()
+
+
+def test_companion_onboarding_reports_missing_profile(account_clients):
+    admin, _ = account_clients
+    pregnancy_query = Mock()
+    profile_query = Mock()
+    admin.table.side_effect = lambda name: {"pregnancies": pregnancy_query, "profiles": profile_query}[name]
+    pregnancy_query.select.return_value.or_.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[])
+    profile_query.update.return_value.eq.return_value.execute.return_value = SimpleNamespace(data=[])
+
+    assert client.post("/api/me/companion").status_code == 404
+
+
+def test_me_repairs_a_misclassified_companion_before_returning_profile(account_clients):
+    admin, _ = account_clients
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="user-1", email="old@example.com", signup_role="companion")
+    profile_query = Mock()
+    pregnancy_query = Mock()
+    admin.table.side_effect = lambda name: {"profiles": profile_query, "pregnancies": pregnancy_query}[name]
+    profile_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value = SimpleNamespace(data={"id": "user-1", "role": "mother"})
+    pregnancy_query.select.return_value.or_.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[])
+    profile_query.update.return_value.eq.return_value.execute.return_value = SimpleNamespace(data=[{"id": "user-1", "role": "companion"}])
+
+    response = client.get("/api/me")
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "companion"
+    profile_query.update.assert_called_once_with({"role": "companion"})
+
+
+def test_me_does_not_convert_mother_registrations(account_clients):
+    admin, _ = account_clients
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="user-1", email="old@example.com", signup_role="mother")
+    query = admin.table.return_value
+    query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value = SimpleNamespace(data={"id": "user-1", "role": "mother"})
+    response = client.get("/api/me")
+    assert response.status_code == 200
+    assert response.json()["role"] == "mother"
+    query.update.assert_not_called()
+
+
+def test_me_preserves_existing_pregnancy_when_role_is_misclassified(account_clients):
+    admin, _ = account_clients
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="user-1", email="old@example.com", signup_role="companion")
+    profile_query = Mock()
+    pregnancy_query = Mock()
+    admin.table.side_effect = lambda name: {"profiles": profile_query, "pregnancies": pregnancy_query}[name]
+    profile_query.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value = SimpleNamespace(data={"id": "user-1", "role": "mother"})
+    pregnancy_query.select.return_value.or_.return_value.limit.return_value.execute.return_value = SimpleNamespace(data=[{"id": "keep-this-pregnancy"}])
+    assert client.get("/api/me").status_code == 409
+    profile_query.update.assert_not_called()
+    pregnancy_query.delete.assert_not_called()

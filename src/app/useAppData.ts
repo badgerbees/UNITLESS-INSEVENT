@@ -4,7 +4,6 @@ import { api, ApiError, type EmergencyAlertRow, type VitalLog as ApiVitalLog } f
 import { getSupabaseClient } from "../lib/supabase";
 import { auth } from "../services/auth";
 import { useToday } from "../hooks/useToday";
-import { DEFAULT_VITAMINS } from "../pages/HealthScreen";
 import type { CustomSymptom, EmergencyAlert, Mode, Risk, UserProfile, VitalLog, Vitamin } from "../types";
 
 function loadJSON<T>(key: string, fallback: T): T {
@@ -67,18 +66,18 @@ export function useAppData(user: User | null) {
   const [vitalLogs, setVitalLogs] = useState<VitalLog[]>([]);
   const [vitDone, setVitDone] = useState<Record<string, boolean>>({});
   const [symptoms, setSymptoms] = useState<Record<string, boolean>>({});
-  const [vitamins, setVitamins] = useState<Vitamin[]>(() => loadJSON("vitamins", DEFAULT_VITAMINS));
+  const [vitamins, setVitamins] = useState<Vitamin[]>([]);
   const [customSymptoms, setCustomSymptoms] = useState<CustomSymptom[]>(() => loadJSON("customSymptoms", []));
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    motherName: "Bunda Sari",
-    fatherName: "Ayah Ahmad",
-    email: "bunda.sari@email.com",
-    phone: "0812-3456-7890",
-    hphtDate: "2024-12-01",
-    hospital: "RSIA Bunda Jakarta",
-    doctor: "dr. Ratna, Sp.OG",
-    bloodType: "A+",
-    syncCode: "MELA-8821",
+    motherName: "",
+    fatherName: "",
+    email: "",
+    phone: "",
+    hphtDate: "",
+    hospital: "",
+    doctor: "",
+    bloodType: "",
+    syncCode: "",
     syncCodeExpiresAt: "",
     notifVitamin: true,
     notifAnc: true,
@@ -86,18 +85,17 @@ export function useAppData(user: User | null) {
     notifWeeklyReport: true,
   });
 
-  useEffect(() => { saveJSON("vitamins", vitamins); }, [vitamins]);
   useEffect(() => { saveJSON("customSymptoms", customSymptoms); }, [customSymptoms]);
 
   useEffect(() => {
     if (!user) { setHasPregnancy(null); setRole(null); return; }
     setLoadError(null);
     let active = true;
-    Promise.all([
-      api.getMe(),
+    // Resolve registration-role repairs before requesting pregnancy membership.
+    api.getMe().then(async profile => [profile, ...await Promise.all([
       api.getCurrentPregnancy().catch(error => (error instanceof ApiError && error.status === 404 ? null : Promise.reject(error))),
       api.getPregnancyMembers().catch(error => (error instanceof ApiError && error.status === 404 ? null : Promise.reject(error))),
-    ])
+    ])] as const)
       .then(([profile, pregnancy, memberResult]) => {
         if (!active) return;
         const mother = memberResult?.members.find(member => member.role === "mother");
@@ -110,14 +108,14 @@ export function useAppData(user: User | null) {
         setPostpartumAdmin(pregnancy?.postpartum_admin ?? {});
         setUserProfile(previous => ({
           ...previous,
-          motherName: mother?.full_name || (profile.role === "mother" ? profile.full_name || previous.motherName : previous.motherName),
+          motherName: mother?.full_name || (profile.role === "mother" ? profile.full_name || "" : ""),
           // Setelah data asli dimuat, jangan pakai nilai contoh (mis. "Ayah Ahmad", "RSIA Bunda Jakarta"):
           // kosong berarti memang belum diisi, dan tidak boleh tercetak di dokumen seperti Rencana Persalinan.
           fatherName: companion?.full_name || (profile.role === "companion" ? profile.full_name || "" : ""),
           motherPhone: mother?.phone || "",
           fatherPhone: companion?.phone || "",
           email: user.email || previous.email,
-          phone: profile.phone || previous.phone,
+          phone: profile.phone || "",
           hphtDate: pregnancy?.hpht_date || previous.hphtDate,
           hospital: pregnancy ? pregnancy.hospital || "" : previous.hospital,
           doctor: pregnancy ? pregnancy.doctor || "" : previous.doctor,
@@ -155,7 +153,7 @@ export function useAppData(user: User | null) {
       .then(([remoteVitals, remoteVitamins, remoteSymptoms, remoteVitaminLogs]) => {
         if (!active) return;
         setVitalLogs(remoteVitals.map(toVitalLog));
-        if (remoteVitamins.length > 0) setVitamins(remoteVitamins.map(v => ({ id: v.id, label: v.label, dose: v.dose || "", color: v.color })));
+        setVitamins(remoteVitamins.map(v => ({ id: v.id, label: v.label, dose: v.dose || "", color: v.color })));
         setSymptoms(Object.fromEntries(remoteSymptoms.map(symptom => [symptom.symptom_code, symptom.is_active])));
         setVitDone(Object.fromEntries(remoteVitaminLogs.map(log => [log.vitamin_id, true])));
       })

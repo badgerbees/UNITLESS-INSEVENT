@@ -51,7 +51,7 @@ export default function App() {
   const mode: Mode = role ?? "mother";
   const t = THEMES[mode];
 
-  const hpht         = new Date(userProfile.hphtDate || "2024-12-01");
+  const hpht         = new Date(userProfile.hphtDate);
   const dueDate      = addDays(hpht, 280);
   const today        = new Date();
   const daysPreg     = Math.floor((today.getTime() - hpht.getTime()) / 86400000);
@@ -96,7 +96,7 @@ export default function App() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-6 text-center" style={{ background: t.bg }}>
         <p className="text-sm font-bold" style={{ color: t.dark }}>Gagal memuat data akun</p>
         <p className="text-xs max-w-sm" style={{ color: t.muted }}>
-          Server tidak dapat dihubungi atau sedang bermasalah. Periksa koneksi internet lalu coba lagi.
+          {loadError}
         </p>
         <div className="flex gap-2 mt-1">
           <button onClick={() => void auth.signOut()} className="ui-interactive px-4 py-2 rounded-full text-xs font-bold" style={{ background: t.soft, color: t.active }}>

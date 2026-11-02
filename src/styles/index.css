@@ -3,8 +3,24 @@
 @import './theme.css';
 @import './organ-anim.css';
 
+@layer base {
+  button:not(:disabled),
+  a[href],
+  [role="button"],
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
 @layer components {
   .ui-interactive {
+    cursor: pointer;
     transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
   }
 
@@ -19,6 +35,7 @@
 
   /* Tombol nonaktif tidak bereaksi terhadap hover/tekan */
   .ui-interactive:disabled {
+    cursor: not-allowed;
     filter: none;
     transform: none;
   }

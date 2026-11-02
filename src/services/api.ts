@@ -167,6 +167,14 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(payload),
   }),
+  updateEmail: (email: string) => request<{ email: string }>("/me/email", {
+    method: "PATCH",
+    body: JSON.stringify({ email }),
+  }),
+  updatePassword: (current_password: string, new_password: string) => request<{ message: string }>("/me/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password, new_password }),
+  }),
   getCurrentPregnancy: () => request<Pregnancy>("/pregnancies/current"),
   getPregnancyMembers: () => request<{ pregnancy_id: string; members: PregnancyMember[] }>("/pregnancies/members"),
   createPregnancy: (payload: {

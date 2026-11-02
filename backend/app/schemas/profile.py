@@ -30,6 +30,15 @@ class PreferencesUpdate(BaseModel):
     notif_weekly_report: bool | None = None
 
 
+class EmailUpdate(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+
+
+class PasswordUpdate(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class PregnancyCreate(BaseModel):
     hpht_date: date
     blood_type: str | None = None

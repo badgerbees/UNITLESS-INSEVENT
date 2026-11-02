@@ -40,6 +40,42 @@ def test_pregnancy_routes_require_authentication() -> None:
     assert client.patch("/api/pregnancies/current", json={"birth_at": None}).status_code == 401
 
 
+def test_members_returns_paired_companion_name(monkeypatch) -> None:
+    _as_role(monkeypatch, "mother")
+
+    class FakeQuery:
+        def select(self, _columns: str) -> "FakeQuery":
+            return self
+
+        def in_(self, _column: str, _values: list[str]) -> "FakeQuery":
+            return self
+
+        def execute(self):
+            return type("Result", (), {"data": [
+                {"id": "mother-1", "full_name": "Bunda", "phone": None, "role": "mother"},
+                {"id": "companion-1", "full_name": "Ayah Test", "phone": None, "role": "companion"},
+            ]})()
+
+    class FakeSupabase:
+        def table(self, _name: str) -> FakeQuery:
+            return FakeQuery()
+
+    monkeypatch.setattr(pregnancies, "_find_current", lambda _user: {
+        "id": "pregnancy-1",
+        "mother_id": "mother-1",
+        "companion_id": "companion-1",
+    })
+    monkeypatch.setattr(pregnancies, "get_supabase_admin", lambda: FakeSupabase())
+    try:
+        response = client.get("/api/pregnancies/members")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    companion = next(member for member in response.json()["members"] if member["role"] == "companion")
+    assert companion["full_name"] == "Ayah Test"
+
+
 def test_birth_at_accepts_past_time_and_admin_progress() -> None:
     born = datetime.now(timezone.utc) - timedelta(hours=2)
     payload = PregnancyUpdate(birth_at=born, postpartum_admin={"surat": True, "akta": False})
